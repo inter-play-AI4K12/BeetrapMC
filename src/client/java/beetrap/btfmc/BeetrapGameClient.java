@@ -43,6 +43,8 @@ public class BeetrapGameClient {
     private boolean bPressed;
     private boolean hPressed;
     private String lastShownHint;
+    private int tickCounter;
+    private static final int SECONDS_PER_LOG = 5;
 
     public BeetrapGameClient() {
         this.client = MinecraftClient.getInstance();
@@ -50,6 +52,7 @@ public class BeetrapGameClient {
         this.currentSubActivity = SUB_ACTIVITY_NULL;
         this.hPressed = false;
         this.lastShownHint = null;
+        this.tickCounter = 0;
     }
 
     private void onSubActivity1() {
@@ -82,6 +85,17 @@ public class BeetrapGameClient {
     }
 
     public void onStartWorldTick(ClientWorld clientWorld) {
+        tickCounter++;
+        if (tickCounter >= SECONDS_PER_LOG * 20) {
+            tickCounter = 0;
+            if (this.client.player != null) {
+                double x = this.client.player.getX();
+                double y = this.client.player.getY();
+                double z = this.client.player.getZ();
+                beetrapLog("PLAYER_POS", String.format("X:%.2f Y:%.2f Z:%.2f", x, y, z));
+            }
+        }
+
         if(this.updateTargetEntity()) {
             this.updateGlowingEntity();
 
