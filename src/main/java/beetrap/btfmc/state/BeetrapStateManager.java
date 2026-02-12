@@ -58,11 +58,11 @@ public class BeetrapStateManager {
                 flowerManager, interaction, beeNestController, gardenInformationBossBar,
                 flowerValueScoreboardDisplayerService, false,
                 INITIAL_POLLINATION_CIRCLE_RADIUS, AMOUNT_OF_FLOWERS_TO_WITHER_DEFAULT_MODE);
-        // this.state = new ActivitySelectionState(world, this,
-        //         new FlowerPool(FLOWER_POOL_FLOWER_COUNT), flowerManager, interaction,
-        //         beeNestController, gardenInformationBossBar, flowerValueScoreboardDisplayerService,
-        //         false,
-        //         INITIAL_POLLINATION_CIRCLE_RADIUS, AMOUNT_OF_FLOWERS_TO_WITHER_DEFAULT_MODE);
+        this.state = new ActivitySelectionState(world, this,
+                new FlowerPool(FLOWER_POOL_FLOWER_COUNT), flowerManager, interaction,
+                beeNestController, gardenInformationBossBar, flowerValueScoreboardDisplayerService,
+                false,
+                INITIAL_POLLINATION_CIRCLE_RADIUS, AMOUNT_OF_FLOWERS_TO_WITHER_DEFAULT_MODE);
         this.state.populateFlowers(INITIAL_FLOWER_COUNT);
         this.oldBeetrapStates = new ArrayList<>();
         flowerManager.placeFlowerEntities(this.state);
