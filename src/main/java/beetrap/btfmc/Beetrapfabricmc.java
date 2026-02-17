@@ -14,9 +14,15 @@ import java.util.Properties;
 import net.fabricmc.api.ModInitializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import java.time.Instant;
+import java.util.UUID;
+import java.time.format.DateTimeFormatter;
 
 public class Beetrapfabricmc implements ModInitializer {
 
+    public static String sessionCode = UUID.randomUUID().toString().substring(0, 8);
+    public static String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+    public static String sessionId = sessionCode + "_" + timestamp;
     public static final Logger LOG = LogManager.getLogger(Beetrapfabricmc.class);
     public static final String MOD_ID = "beetrap-fabricmc";
     public static final String MOD_REQUIRED_OPENAI_API_KEY = "OPENAI_API_KEY";

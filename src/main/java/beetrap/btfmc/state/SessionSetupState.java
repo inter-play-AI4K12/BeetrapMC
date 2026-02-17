@@ -11,9 +11,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import java.util.UUID;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
+import beetrap.btfmc.Beetrapfabricmc;
 
 public class SessionSetupState extends BeetrapState {
     private static final Logger LOG = LogManager.getLogger(SessionSetupState.class);
@@ -48,6 +46,7 @@ public class SessionSetupState extends BeetrapState {
         this.consented = false;
         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CODE_ID, "Enter your session code:", "Session code input not implemented yet"));
         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CONSENT_ID, "Do you consent to your data being recorded?", "YES", "NO"));
+        this.net.beetrapLog("SESSION_SETUP", Beetrapfabricmc.sessionId);
     }
 
     // @Override
@@ -78,10 +77,6 @@ public class SessionSetupState extends BeetrapState {
                 this.stage = STAGE_DONE;
             }
         }
-        String sessionCode = UUID.randomUUID().toString().substring(0, 8);
-        String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-        String userID = sessionCode + "_" + timestamp;
-        this.net.beetrapLog("SESSION_SETUP", userID);
     }
 
     @Override
