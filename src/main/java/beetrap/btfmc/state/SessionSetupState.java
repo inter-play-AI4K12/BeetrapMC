@@ -11,6 +11,9 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import java.util.UUID;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 
 public class SessionSetupState extends BeetrapState {
     private static final Logger LOG = LogManager.getLogger(SessionSetupState.class);
@@ -40,7 +43,7 @@ public class SessionSetupState extends BeetrapState {
                 gardenInformationBossBar, flowerValueScoreboardDisplayerService,
                 usingDiversifyingRankingMethod, pollinationCircleRadius,
                 amountOfFlowersToWither);
-        this.stage = STAGE_SESSION_CODE;
+        this.stage = STAGE_CONSENT;
         this.sessionCode = null;
         this.consented = false;
         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CODE_ID, "Enter your session code:", "Session code input not implemented yet"));
@@ -75,6 +78,10 @@ public class SessionSetupState extends BeetrapState {
                 this.stage = STAGE_DONE;
             }
         }
+        String sessionCode = UUID.randomUUID().toString().substring(0, 8);
+        String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+        String userID = sessionCode + "_" + timestamp;
+        this.net.beetrapLog("SESSION_SETUP", userID);
     }
 
     @Override
