@@ -46,22 +46,8 @@ public class SessionSetupState extends BeetrapState {
         this.consented = false;
         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CODE_ID, "Enter your session code:", "Session code input not implemented yet"));
         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CONSENT_ID, "Do you consent to your data being recorded?", "YES", "NO"));
-        this.net.beetrapLog("SESSION_SETUP", Beetrapfabricmc.sessionId);
+        this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.sessionId);
     }
-
-    // @Override
-    // public void onTextInputResultReceived(String inputId, String text) {
-    //     if(inputId.equals(SESSION_CODE_INPUT_ID) && this.stage == STAGE_SESSION_CODE) {
-    //         this.sessionCode = text;
-    //         LOG.info("Session code received: {}", this.sessionCode);
-    //         this.net.beetrapLog("SESSION_CODE", this.sessionCode);
-    //         this.stage = STAGE_CONSENT;
-    //         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
-    //                 CONSENT_QUESTION_ID,
-    //                 "Do you consent to your data being recorded?",
-    //                 "Yes", "No"));
-    //     }
-    // }
 
     @Override
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
