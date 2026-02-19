@@ -45,7 +45,8 @@ public class BeetrapfabricmcClient implements ClientModInitializer {
     private BeetrapGameClient bg;
 
     public static void beetrapLog(String id, String log) {
-        LOG.info("{{}}{}", id, log);
+        // if(Beetrapfabricmc.PLAYER_DATA_CONSENT)
+             LOG.info("{{}}{}", id, log);
     }
 
     private void onEntityPositionUpdate(EntityPositionUpdateS2CPayload payload, Context context) {

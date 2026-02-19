@@ -16,10 +16,8 @@ import beetrap.btfmc.Beetrapfabricmc;
 public class SessionSetupState extends BeetrapState {
     private static final Logger LOG = LogManager.getLogger(SessionSetupState.class);
 
-    private static final String SESSION_SETUP_CODE_ID = "session_setup_code";
     private static final String SESSION_SETUP_CONSENT_ID = "session_setup_consent";
 
-    private static final int STAGE_SESSION_CODE = 0;
     private static final int STAGE_CONSENT = 1;
     private static final int STAGE_DONE = 2;
 
@@ -44,8 +42,7 @@ public class SessionSetupState extends BeetrapState {
         this.stage = STAGE_CONSENT;
         this.sessionCode = null;
         this.consented = false;
-        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CODE_ID, "Enter your session code:", "Session code input not implemented yet"));
-        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CONSENT_ID, "Do you consent to your data being recorded?", "YES", "NO"));
+        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CONSENT_ID, "Do you consent to your data being recorded (for study purposes)?", "YES", "NO"));
         this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.sessionId);
     }
 
@@ -53,14 +50,17 @@ public class SessionSetupState extends BeetrapState {
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
         if(questionId.equals(SESSION_SETUP_CONSENT_ID) && this.stage == STAGE_CONSENT) {
             if(option == CONSENT_YES) {
+                Beetrapfabricmc.PLAYER_DATA_CONSENT = true;
                 this.consented = true;
                 LOG.info("Player consented to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "yes");
                 this.stage = STAGE_DONE;
+                System.out.println("SANITY CHECK: CONSENTED = " + Beetrapfabricmc.PLAYER_DATA_CONSENT);
             } else {
                 LOG.info("Player did not consent to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "no");
                 this.stage = STAGE_DONE;
+                System.out.println("SANITY CHECK: CONSENTED = " + Beetrapfabricmc.PLAYER_DATA_CONSENT);
             }
         }
     }
