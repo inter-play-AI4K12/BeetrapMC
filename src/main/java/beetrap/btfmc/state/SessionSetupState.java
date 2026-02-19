@@ -16,17 +16,15 @@ import beetrap.btfmc.Beetrapfabricmc;
 public class SessionSetupState extends BeetrapState {
     private static final Logger LOG = LogManager.getLogger(SessionSetupState.class);
 
-    private static final String SESSION_SETUP_CONSENT_ID = "session_setup_consent";
+    private static final String SESSION_SETUP_SCREEN_ID = "session_setup_screen";
 
-    private static final int STAGE_CONSENT = 1;
-    private static final int STAGE_DONE = 2;
+    private static final int STAGE_CONSENT = 0;
+    private static final int STAGE_DONE = 1;
 
     private static final int CONSENT_YES = 0;
     private static final int CONSENT_NO = 1;
 
     private int stage;
-    private String sessionCode;
-    private boolean consented;
 
     public SessionSetupState(ServerWorld world, BeetrapStateManager manager, FlowerPool flowerPool,
             FlowerManager flowerManager, PlayerInteractionService interaction,
@@ -39,28 +37,19 @@ public class SessionSetupState extends BeetrapState {
                 gardenInformationBossBar, flowerValueScoreboardDisplayerService,
                 usingDiversifyingRankingMethod, pollinationCircleRadius,
                 amountOfFlowersToWither);
-        this.stage = STAGE_CONSENT;
-        this.sessionCode = null;
-        this.consented = false;
-        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_CONSENT_ID, "Do you consent to your data being recorded (for study purposes)?", "YES", "NO"));
+        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_SCREEN_ID, "Do you consent to your data being recorded (for study purposes)?", "YES", "NO"));
         this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.sessionId);
     }
 
     @Override
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
-        if(questionId.equals(SESSION_SETUP_CONSENT_ID) && this.stage == STAGE_CONSENT) {
+        if(questionId.equals(SESSION_SETUP_SCREEN_ID)) {
             if(option == CONSENT_YES) {
-                Beetrapfabricmc.PLAYER_DATA_CONSENT = true;
-                this.consented = true;
                 LOG.info("Player consented to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "yes");
-                this.stage = STAGE_DONE;
-                System.out.println("SANITY CHECK: CONSENTED = " + Beetrapfabricmc.PLAYER_DATA_CONSENT);
             } else {
                 LOG.info("Player did not consent to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "no");
-                this.stage = STAGE_DONE;
-                System.out.println("SANITY CHECK: CONSENTED = " + Beetrapfabricmc.PLAYER_DATA_CONSENT);
             }
         }
     }
@@ -92,13 +81,5 @@ public class SessionSetupState extends BeetrapState {
     @Override
     public void onPlayerTargetNewEntity(ServerPlayerEntity player, boolean exists, int id) {
         super.onPlayerTargetNewEntity(player, false, id);
-    }
-
-    public String getSessionCode() {
-        return this.sessionCode;
-    }
-
-    public boolean hasConsented() {
-        return this.consented;
     }
 }
