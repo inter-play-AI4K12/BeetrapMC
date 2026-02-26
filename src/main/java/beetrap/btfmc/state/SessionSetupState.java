@@ -13,6 +13,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import beetrap.btfmc.Beetrapfabricmc;
 
+/**
+ * @deprecated functionality has been folded into {@link MenuState};
+ *             use that class instead.
+ */
+@Deprecated
 public class SessionSetupState extends BeetrapState {
     private static final Logger LOG = LogManager.getLogger(SessionSetupState.class);
 
@@ -37,8 +42,7 @@ public class SessionSetupState extends BeetrapState {
                 gardenInformationBossBar, flowerValueScoreboardDisplayerService,
                 usingDiversifyingRankingMethod, pollinationCircleRadius,
                 amountOfFlowersToWither);
-        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(SESSION_SETUP_SCREEN_ID, "Do you consent to your data being recorded (for study purposes)?", "YES", "NO"));
-        this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.sessionId);
+        throw new UnsupportedOperationException("SessionSetupState is deprecated; use MenuState instead");
     }
 
     @Override

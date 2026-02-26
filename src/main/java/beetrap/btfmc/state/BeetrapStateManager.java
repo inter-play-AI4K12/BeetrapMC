@@ -16,6 +16,7 @@ import beetrap.btfmc.flower.FlowerPool;
 import beetrap.btfmc.flower.FlowerValueScoreboardDisplayerService;
 import beetrap.btfmc.networking.NetworkingService;
 import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload.Operations;
+import beetrap.btfmc.state.MenuState;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.entity.Entity;
@@ -55,14 +56,10 @@ public class BeetrapStateManager {
         this.interaction = interaction;
         this.gardenInformationBossBar = gardenInformationBossBar;
         this.pointer = -1;
-        this.state = new SessionSetupState(world, this, new FlowerPool(FLOWER_POOL_FLOWER_COUNT),
+        // start the player in our combined menu state which handles both consent and activity selection
+        this.state = new MenuState(world, this, new FlowerPool(FLOWER_POOL_FLOWER_COUNT),
                 flowerManager, interaction, beeNestController, gardenInformationBossBar,
                 flowerValueScoreboardDisplayerService, false,
-                INITIAL_POLLINATION_CIRCLE_RADIUS, AMOUNT_OF_FLOWERS_TO_WITHER_DEFAULT_MODE);
-        this.state = new ActivitySelectionState(world, this,
-                new FlowerPool(FLOWER_POOL_FLOWER_COUNT), flowerManager, interaction,
-                beeNestController, gardenInformationBossBar, flowerValueScoreboardDisplayerService,
-                false,
                 INITIAL_POLLINATION_CIRCLE_RADIUS, AMOUNT_OF_FLOWERS_TO_WITHER_DEFAULT_MODE);
         this.state.populateFlowers(INITIAL_FLOWER_COUNT);
         this.oldBeetrapStates = new ArrayList<>();
