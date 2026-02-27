@@ -46,8 +46,8 @@ public class BeetrapfabricmcClient implements ClientModInitializer {
     private BeetrapGameClient bg;
 
     public static void beetrapLog(String id, String log) {
-        // if(Beetrapfabricmc.PLAYER_DATA_CONSENT)
-             LOG.info("{{}}{}", id, log);
+        if(Beetrapfabricmc.PLAYER_DATA_CONSENT && Beetrapfabricmc.USERNAME != null)
+             LOG.info("{}{{}}{}", Beetrapfabricmc.SESSION_ID, id, log);
     }
 
     private void onEntityPositionUpdate(EntityPositionUpdateS2CPayload payload, Context context) {

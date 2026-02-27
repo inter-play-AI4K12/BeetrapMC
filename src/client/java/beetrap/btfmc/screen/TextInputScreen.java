@@ -76,7 +76,7 @@ public class TextInputScreen extends Screen {
                 TEXT_FIELD_HEIGHT,
                 Text.literal("Enter text")
         );
-        this.textField.setMaxLength(256);
+        this.textField.setMaxLength(16);
         this.textField.setEditable(true);
         this.textField.setFocused(true);
         this.textField.active = true;

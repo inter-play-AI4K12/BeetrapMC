@@ -21,9 +21,10 @@ import java.time.format.DateTimeFormatter;
 public class Beetrapfabricmc implements ModInitializer {
 
     public static boolean PLAYER_DATA_CONSENT = false;
-    public static String sessionCode = UUID.randomUUID().toString().substring(0, 8);
-    public static String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-    public static String sessionId = sessionCode + "_" + timestamp;
+    public static String USERNAME = null;
+    public static String SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
+    public static String TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+    public static String SESSION_ID = SESSION_CODE + "_" + TIMESTAMP;
     public static final Logger LOG = LogManager.getLogger(Beetrapfabricmc.class);
     public static final String MOD_ID = "beetrap-fabricmc";
     public static final String MOD_REQUIRED_OPENAI_API_KEY = "OPENAI_API_KEY";

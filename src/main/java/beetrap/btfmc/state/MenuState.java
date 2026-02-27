@@ -75,13 +75,14 @@ public class MenuState extends BeetrapState {
                 "YES",
                 "NO"));
 
-        this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.sessionId);
+        this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.SESSION_ID);
     }
 
     @Override
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
         if (this.stage == STAGE_CONSENT && questionId.equals(CONSENT_SCREEN_ID)) {
             if (option == CONSENT_YES) {
+                Beetrapfabricmc.PLAYER_DATA_CONSENT = true;
                 LOG.info("Player consented to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "yes");
             } else {
@@ -107,6 +108,8 @@ public class MenuState extends BeetrapState {
         if (this.stage == STAGE_TEXT_INPUT && screenId.equals(TEXT_INPUT_SCREEN_ID)) {
             LOG.info("Player entered name: {}", textInput);
             this.textInput = textInput;
+            Beetrapfabricmc.USERNAME = textInput;
+            Beetrapfabricmc.SESSION_ID = Beetrapfabricmc.USERNAME + "_" + Beetrapfabricmc.SESSION_ID;
             this.net.beetrapLog("PLAYER_NAME", textInput);
             
             // advance to activity selection
