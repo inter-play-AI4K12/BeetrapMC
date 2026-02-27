@@ -78,9 +78,10 @@ public class TextInputScreen extends Screen {
         );
         this.textField.setMaxLength(16);
         this.textField.setEditable(true);
-        this.textField.setFocused(true);
         this.textField.active = true;
         this.addDrawableChild(this.textField);
+        this.setFocused(this.textField);
+        this.textField.setFocused(true);
         this.setInitialFocus(this.textField);
 
         // Create the submit button
