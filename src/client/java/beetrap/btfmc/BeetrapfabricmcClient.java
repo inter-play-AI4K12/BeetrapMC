@@ -3,6 +3,7 @@ package beetrap.btfmc;
 import static beetrap.btfmc.networking.BeetrapLogS2CPayload.BEETRAP_LOG_ID_INITIALIZE;
 
 import beetrap.btfmc.handler.EntityHandler;
+import beetrap.btfmc.handler.LokiHandler;
 import beetrap.btfmc.networking.BeetrapLogS2CPayload;
 import beetrap.btfmc.networking.BeginSubActivityS2CPayload;
 import beetrap.btfmc.networking.EntityPositionUpdateS2CPayload;
@@ -46,8 +47,10 @@ public class BeetrapfabricmcClient implements ClientModInitializer {
     private BeetrapGameClient bg;
 
     public static void beetrapLog(String id, String log) {
-        if(Beetrapfabricmc.PLAYER_DATA_CONSENT && Beetrapfabricmc.USERNAME != null)
+        if(Beetrapfabricmc.PLAYER_DATA_CONSENT && Beetrapfabricmc.USERNAME != null) {
              LOG.info("{}{{}}{}", Beetrapfabricmc.SESSION_ID, id, log);
+             LokiHandler.pushLokiLog(log);
+        }
     }
 
     private void onEntityPositionUpdate(EntityPositionUpdateS2CPayload payload, Context context) {

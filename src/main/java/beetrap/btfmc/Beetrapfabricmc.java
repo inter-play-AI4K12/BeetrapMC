@@ -74,7 +74,7 @@ public class Beetrapfabricmc implements ModInitializer {
     @Override
     public void onInitialize() {
         this.loadEnv();
-        LokiHandler.pushLokiLog("beetrap server initialized");
+        // LokiHandler.pushLokiLog("beetrap server initialized");
         OpenAiUtil.load();
         BeetrapGameHandler.registerEvents();
         CommandHandler.registerCommands();
