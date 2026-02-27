@@ -16,6 +16,7 @@ import beetrap.btfmc.flower.FlowerManager;
 import beetrap.btfmc.flower.FlowerPool;
 import beetrap.btfmc.flower.FlowerValueScoreboardDisplayerService;
 import beetrap.btfmc.networking.ShowMultipleChoiceScreenS2CPayload;
+import beetrap.btfmc.networking.ShowTextInputScreenS2CPayload;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import org.apache.logging.log4j.LogManager;
@@ -30,11 +31,13 @@ public class MenuState extends BeetrapState {
     private static final Logger LOG = LogManager.getLogger(MenuState.class);
 
     private static final String CONSENT_SCREEN_ID = "consent_screen";
+    private static final String TEXT_INPUT_SCREEN_ID = "text_input_screen";
     private static final String ACTIVITY_SELECTION_SCREEN_ID = "activity_selection";
 
     private static final int STAGE_CONSENT = 0;
-    private static final int STAGE_ACTIVITY = 1;
-    private static final int STAGE_DONE = 2;
+    private static final int STAGE_TEXT_INPUT = 1;
+    private static final int STAGE_ACTIVITY = 2;
+    private static final int STAGE_DONE = 3;
 
     private static final int CONSENT_YES = 0;
     private static final int CONSENT_NO = 1;
@@ -48,6 +51,7 @@ public class MenuState extends BeetrapState {
 
     private int stage;
     private int activityNumber;
+    private String textInput;
 
     public MenuState(ServerWorld world, BeetrapStateManager manager, FlowerPool flowerPool,
             FlowerManager flowerManager, PlayerInteractionService interaction,
@@ -64,6 +68,7 @@ public class MenuState extends BeetrapState {
         // start with consent screen
         this.stage = STAGE_CONSENT;
         this.activityNumber = NO_ACTIVITY;
+        this.textInput = "";
         this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
                 CONSENT_SCREEN_ID,
                 "Do you consent to your data being recorded (for study purposes)?",
@@ -83,6 +88,27 @@ public class MenuState extends BeetrapState {
                 LOG.info("Player did not consent to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "no");
             }
+            // advance to text input stage
+            this.stage = STAGE_TEXT_INPUT;
+            this.net.broadcastCustomPayload(new ShowTextInputScreenS2CPayload(
+                    TEXT_INPUT_SCREEN_ID,
+                    "Please enter your name:"));
+            return;
+        }
+
+        if (this.stage == STAGE_ACTIVITY && questionId.equals(ACTIVITY_SELECTION_SCREEN_ID)) {
+            this.activityNumber = option;
+            this.stage = STAGE_DONE;
+        }
+    }
+
+    @Override
+    public void onTextInputScreenResultReceived(String screenId, String textInput) {
+        if (this.stage == STAGE_TEXT_INPUT && screenId.equals(TEXT_INPUT_SCREEN_ID)) {
+            LOG.info("Player entered name: {}", textInput);
+            this.textInput = textInput;
+            this.net.beetrapLog("PLAYER_NAME", textInput);
+            
             // advance to activity selection
             this.stage = STAGE_ACTIVITY;
             this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
@@ -93,12 +119,6 @@ public class MenuState extends BeetrapState {
                     "How does the garden recommend flowers?",
                     "How do we break the filter bubble?",
                     "Mysterious Fifth Activity"));
-            return;
-        }
-
-        if (this.stage == STAGE_ACTIVITY && questionId.equals(ACTIVITY_SELECTION_SCREEN_ID)) {
-            this.activityNumber = option;
-            this.stage = STAGE_DONE;
         }
     }
 

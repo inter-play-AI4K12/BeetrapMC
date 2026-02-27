@@ -6,6 +6,7 @@ import beetrap.btfmc.networking.PlayerPollinateC2SPayload;
 import beetrap.btfmc.networking.PlayerTargetNewEntityC2SPayload;
 import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload;
 import beetrap.btfmc.networking.PollinationCircleRadiusIncreaseRequestC2SPayload;
+import beetrap.btfmc.networking.TextInputResultC2SPayload;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.Context;
@@ -113,6 +114,18 @@ public final class BeetrapGameHandler {
         game.onMultipleChoiceSelectionResultReceived(
                 multipleChoiceSelectionResultC2SPayload.questionId(),
                 multipleChoiceSelectionResultC2SPayload.option());
+    }
+
+    public static void onTextInputResultReceived(
+            TextInputResultC2SPayload textInputResultC2SPayload,
+            Context context) {
+        if(!hasGame()) {
+            return;
+        }
+
+        game.onTextInputResultReceived(
+                textInputResultC2SPayload.screenId(),
+                textInputResultC2SPayload.textInput());
     }
 
     public static BeetrapGame getGame() {

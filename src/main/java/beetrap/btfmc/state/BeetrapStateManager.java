@@ -222,6 +222,10 @@ public class BeetrapStateManager {
         this.state.onMultipleChoiceSelectionResultReceived(questionId, option);
     }
 
+    public void onTextInputResultReceived(String screenId, String textInput) {
+        this.state.onTextInputScreenResultReceived(screenId, textInput);
+    }
+
     public void onPollinationCircleRadiusIncreaseRequested(double a) {
         this.state.onPollinationCircleRadiusIncreaseRequested(a);
     }

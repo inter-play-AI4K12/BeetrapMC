@@ -11,7 +11,9 @@ import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload;
 import beetrap.btfmc.networking.PollinationCircleRadiusIncreaseRequestC2SPayload;
 import beetrap.btfmc.networking.RestartGameC2SPayload;
 import beetrap.btfmc.networking.ShowMultipleChoiceScreenS2CPayload;
+import beetrap.btfmc.networking.ShowTextInputScreenS2CPayload;
 import beetrap.btfmc.networking.ShowTextScreenS2CPayload;
+import beetrap.btfmc.networking.TextInputResultC2SPayload;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 
@@ -28,6 +30,8 @@ public final class NetworkHandler {
                 ShowTextScreenS2CPayload.ID, ShowTextScreenS2CPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(ShowMultipleChoiceScreenS2CPayload.ID,
                 ShowMultipleChoiceScreenS2CPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(ShowTextInputScreenS2CPayload.ID,
+                ShowTextInputScreenS2CPayload.CODEC);
         PayloadTypeRegistry.playS2C()
                 .register(BeginSubActivityS2CPayload.ID, BeginSubActivityS2CPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(BeetrapLogS2CPayload.ID, BeetrapLogS2CPayload.CODEC);
@@ -57,6 +61,11 @@ public final class NetworkHandler {
                 MultipleChoiceSelectionResultC2SPayload.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(MultipleChoiceSelectionResultC2SPayload.ID,
                 BeetrapGameHandler::onMultipleChoiceSelectionResultReceived);
+
+        PayloadTypeRegistry.playC2S().register(TextInputResultC2SPayload.ID,
+                TextInputResultC2SPayload.CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(TextInputResultC2SPayload.ID,
+                BeetrapGameHandler::onTextInputResultReceived);
 
         PayloadTypeRegistry.playC2S()
                 .register(EndSubActivityC2SPayload.ID, EndSubActivityC2SPayload.CODEC);

@@ -141,6 +141,10 @@ public class BeetrapGame {
         this.stateManager.onMultipleChoiceSelectionResultReceived(questionId, option);
     }
 
+    public void onTextInputResultReceived(String screenId, String textInput) {
+        this.stateManager.onTextInputResultReceived(screenId, textInput);
+    }
+
     public void onChatMessageMessage(SignedMessage signedMessage,
             ServerPlayerEntity serverPlayerEntity, Parameters parameters) {
         this.agent.onChatMessageReceived(serverPlayerEntity, signedMessage.getSignedContent());

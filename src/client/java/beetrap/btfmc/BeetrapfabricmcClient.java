@@ -7,6 +7,7 @@ import beetrap.btfmc.networking.BeetrapLogS2CPayload;
 import beetrap.btfmc.networking.BeginSubActivityS2CPayload;
 import beetrap.btfmc.networking.EntityPositionUpdateS2CPayload;
 import beetrap.btfmc.networking.ShowMultipleChoiceScreenS2CPayload;
+import beetrap.btfmc.networking.ShowTextInputScreenS2CPayload;
 import beetrap.btfmc.networking.ShowTextScreenS2CPayload;
 import beetrap.btfmc.render.entity.FlowerEntityRenderer;
 import beetrap.btfmc.render.entity.model.BeetrapEntityModelLayers;
@@ -118,6 +119,8 @@ public class BeetrapfabricmcClient implements ClientModInitializer {
                 this::onShowTextScreenReceived);
         ClientPlayNetworking.registerGlobalReceiver(ShowMultipleChoiceScreenS2CPayload.ID,
                 this::onShowMultipleChoiceScreenReceived);
+        ClientPlayNetworking.registerGlobalReceiver(ShowTextInputScreenS2CPayload.ID,
+                this::onShowTextInputScreenReceived);
         ClientPlayNetworking.registerGlobalReceiver(BeginSubActivityS2CPayload.ID,
                 this::beginSubActivity);
         ClientPlayNetworking.registerGlobalReceiver(BeetrapLogS2CPayload.ID, this::beetrapLog);
@@ -167,5 +170,10 @@ public class BeetrapfabricmcClient implements ClientModInitializer {
     private void onShowTextScreenReceived(ShowTextScreenS2CPayload showTextScreenS2CPacket,
             Context context) {
         this.bg.showTextScreen(showTextScreenS2CPacket.text());
+    }
+
+    private void onShowTextInputScreenReceived(ShowTextInputScreenS2CPayload payload,
+            Context context) {
+        this.bg.showTextInputScreen(payload.screenId(), payload.prompt());
     }
 }
