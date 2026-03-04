@@ -134,14 +134,14 @@ public abstract class Agent implements AutoCloseable {
             params = ResponseCreateParams.builder()
                     .instructions(instructions)
                     .input(input)
-                    .model(ChatModel.CHATGPT_4O_LATEST)
+                    .model("gpt-5.2")
                     .previousResponseId(previousResponse.id())
                     .build();
         } else {
             params = ResponseCreateParams.builder()
                     .instructions(instructions)
                     .input(input)
-                    .model(ChatModel.CHATGPT_4O_LATEST)
+                    .model("gpt-5.2")
                     .build();
         }
 
