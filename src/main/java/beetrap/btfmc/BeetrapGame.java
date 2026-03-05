@@ -91,6 +91,10 @@ public class BeetrapGame {
         return this.agent;
     }
 
+    public MinecraftServer getServer() {
+        return this.server;
+    }
+
     public void onWorldTick() {
         if(System.nanoTime() - this.lastTickTime < TICK_INTERVAL_NANO) {
             return;

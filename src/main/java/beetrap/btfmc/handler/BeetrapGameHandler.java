@@ -7,19 +7,28 @@ import beetrap.btfmc.networking.PlayerTargetNewEntityC2SPayload;
 import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload;
 import beetrap.btfmc.networking.PollinationCircleRadiusIncreaseRequestC2SPayload;
 import beetrap.btfmc.networking.TextInputResultC2SPayload;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.networking.v1.PacketSender;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.Context;
 import net.minecraft.network.message.MessageType.Parameters;
 import net.minecraft.network.message.SignedMessage;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.GameMode;
 import org.joml.Vector3i;
 
 public final class BeetrapGameHandler {
 
+    private static final int DEFAULT_AI_LEVEL = 3;
+    private static final int AUTO_START_DELAY_TICKS = 2;
     private static BeetrapGame game;
+    private static MinecraftServer pendingAutoStartServer;
+    private static int pendingAutoStartTicks;
 
     private BeetrapGameHandler() {
         throw new AssertionError();
@@ -83,6 +92,16 @@ public final class BeetrapGameHandler {
     }
 
     public static void onWorldTick(ServerWorld world) {
+        if(pendingAutoStartServer != null && world == pendingAutoStartServer.getOverworld()) {
+            if(--pendingAutoStartTicks <= 0) {
+                if(!hasGame()) {
+                    createGame(pendingAutoStartServer, DEFAULT_AI_LEVEL);
+                }
+                pendingAutoStartServer = null;
+                pendingAutoStartTicks = 0;
+            }
+        }
+
         if(!hasGame()) {
             return;
         }
@@ -99,9 +118,33 @@ public final class BeetrapGameHandler {
         game.onChatMessageMessage(signedMessage, serverPlayerEntity, parameters);
     }
 
+    public static void onPlayerJoin(ServerPlayNetworkHandler serverPlayNetworkHandler,
+            PacketSender packetSender, MinecraftServer minecraftServer) {
+        ServerPlayerEntity player = serverPlayNetworkHandler.player;
+
+        if(hasGame() && game.getServer() != minecraftServer) {
+            destroyGame();
+        }
+
+        player.changeGameMode(GameMode.ADVENTURE);
+        player.getAbilities().allowFlying = true;
+        player.sendAbilitiesUpdate();
+
+        if(!hasGame()) {
+            pendingAutoStartServer = minecraftServer;
+            pendingAutoStartTicks = AUTO_START_DELAY_TICKS;
+        }
+    }
+
     public static void registerEvents() {
         ServerTickEvents.START_WORLD_TICK.register(BeetrapGameHandler::onWorldTick);
         ServerMessageEvents.CHAT_MESSAGE.register(BeetrapGameHandler::onChatMessageReceived);
+        ServerPlayConnectionEvents.JOIN.register(BeetrapGameHandler::onPlayerJoin);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            destroyGame();
+            pendingAutoStartServer = null;
+            pendingAutoStartTicks = 0;
+        });
     }
 
     public static void onMultipleChoiceSelectionResultReceived(
