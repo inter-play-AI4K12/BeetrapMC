@@ -18,6 +18,7 @@ import beetrap.btfmc.networking.PollinationCircleRadiusIncreaseRequestC2SPayload
 import beetrap.btfmc.networking.RestartGameC2SPayload;
 import beetrap.btfmc.screen.MultipleChoiceScreen;
 import beetrap.btfmc.screen.ScreenQueue;
+import beetrap.btfmc.screen.TextInputScreen;
 import beetrap.btfmc.screen.TextScreen;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
@@ -224,6 +225,10 @@ public class BeetrapGameClient {
 
     public void showMultipleChoiceScreen(String questionId, String question, String[] choices) {
         this.sq.push(new MultipleChoiceScreen(this.sq, questionId, question, choices));
+    }
+
+    public void showTextInputScreen(String screenId, String prompt) {
+        this.sq.push(new TextInputScreen(this.sq, screenId, prompt));
     }
 
     public void beginSubActivity(int subActivityId) {

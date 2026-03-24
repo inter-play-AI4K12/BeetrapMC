@@ -91,6 +91,10 @@ public class BeetrapGame {
         return this.agent;
     }
 
+    public MinecraftServer getServer() {
+        return this.server;
+    }
+
     public void onWorldTick() {
         if(System.nanoTime() - this.lastTickTime < TICK_INTERVAL_NANO) {
             return;
@@ -139,6 +143,10 @@ public class BeetrapGame {
 
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
         this.stateManager.onMultipleChoiceSelectionResultReceived(questionId, option);
+    }
+
+    public void onTextInputResultReceived(String screenId, String textInput) {
+        this.stateManager.onTextInputResultReceived(screenId, textInput);
     }
 
     public void onChatMessageMessage(SignedMessage signedMessage,

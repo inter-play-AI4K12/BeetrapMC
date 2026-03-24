@@ -329,6 +329,10 @@ public abstract class BeetrapState implements Iterable<Flower> {
 
     }
 
+    public void onTextInputScreenResultReceived(String screenId, String textInput) {
+
+    }
+
     public void onPollinationCircleRadiusIncreaseRequested(double a) {
 
     }

@@ -18,6 +18,11 @@ import beetrap.btfmc.networking.ShowMultipleChoiceScreenS2CPayload;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 
+/**
+ * @deprecated functionality has been folded into {@link MenuState};
+ *             use that class instead.
+ */
+@Deprecated
 public class ActivitySelectionState extends BeetrapState {
 
     private static final String ACTIVITY_SELECTION_SCREEN_ID = "activity_selection";
@@ -41,15 +46,7 @@ public class ActivitySelectionState extends BeetrapState {
                 gardenInformationBossBar, flowerValueScoreboardDisplayerService,
                 usingDiversifyingRankingMethod, pollinationCircleRadius,
                 amountOfFlowersToWither);
-        this.activityNumber = NO_ACTIVITY;
-        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
-                ACTIVITY_SELECTION_SCREEN_ID,
-                "Select an activity!",
-                "Observe flowers only",
-                "What is the filter bubble effect?",
-                "How does the garden recommend flowers?",
-                "How do we break the filter bubble?",
-                "Mysterious Fifth Activity"));
+        throw new UnsupportedOperationException("ActivitySelectionState is deprecated; use MenuState instead");
     }
 
     @Override
