@@ -3,20 +3,29 @@ package beetrap.btfmc;
 import beetrap.btfmc.handler.BeetrapGameHandler;
 import beetrap.btfmc.handler.CommandHandler;
 import beetrap.btfmc.handler.EntityHandler;
+import beetrap.btfmc.handler.LokiHandler;
 import beetrap.btfmc.handler.NetworkHandler;
 import beetrap.btfmc.openai.OpenAiUtil;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import net.fabricmc.api.ModInitializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class Beetrapfabricmc implements ModInitializer {
 
+    public static boolean PLAYER_DATA_CONSENT = false;
+    public static String USERNAME = null;
+    public static String SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
+    public static String TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+    public static String SESSION_ID = SESSION_CODE + "_" + TIMESTAMP;
     public static final Logger LOG = LogManager.getLogger(Beetrapfabricmc.class);
     public static final String MOD_ID = "beetrap-fabricmc";
     public static final String MOD_REQUIRED_OPENAI_API_KEY = "OPENAI_API_KEY";
@@ -60,9 +69,12 @@ public class Beetrapfabricmc implements ModInitializer {
         properties.putAll(p);
     }
 
+
+
     @Override
     public void onInitialize() {
         this.loadEnv();
+        // LokiHandler.pushLokiLog("beetrap server initialized");
         OpenAiUtil.load();
         BeetrapGameHandler.registerEvents();
         CommandHandler.registerCommands();
