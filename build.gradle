@@ -54,7 +54,6 @@ dependencies {
 
 	implementation 'org.ejml:ejml-all:0.44.0'
 	implementation 'org.apache.commons:commons-math3:3.6.1'
-	implementation 'com.openai:openai-java:2.3.0'
 	implementation 'ca.weblite:java-objc-bridge:1.2'
 	implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
 

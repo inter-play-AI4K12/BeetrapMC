@@ -4,7 +4,7 @@ import static beetrap.btfmc.agent.Agent.AGENT_LEVEL_PHYSICAL;
 
 import beetrap.btfmc.agent.Agent;
 import beetrap.btfmc.agent.empty.EmptyAgent;
-import beetrap.btfmc.agent.physical.PhysicalAgent;
+import beetrap.btfmc.agent.remote.RemotePhysicalAgent;
 import beetrap.btfmc.flower.FlowerManager;
 import beetrap.btfmc.flower.FlowerValueScoreboardDisplayerService;
 import beetrap.btfmc.networking.NetworkingService;
@@ -76,7 +76,7 @@ public class BeetrapGame {
     public void newAgent() {
         switch(this.aiLevel) {
             case AGENT_LEVEL_PHYSICAL -> {
-                this.agent = new PhysicalAgent(this.world, this.stateManager);
+                this.agent = new RemotePhysicalAgent(this.world, this.stateManager);
             }
 
             default -> {

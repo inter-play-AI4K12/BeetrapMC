@@ -4,7 +4,22 @@ GPT how-tos: https://chatgpt.com/share/68a788eb-4118-8012-8e69-225af208eaca
 
 A Minecraft Fabric mod that runs a **bee & flower “Beetrap” game** inside a bounded garden area.  
 Gameplay logic is orchestrated on the server and exposed to players via custom payloads, chat, boss bars, and a scoreboard.  
-An **LLM-driven Agent** can observe events and issue high-level commands that are translated into in‑game actions via the game/state managers.
+An **LLM-driven Agent** can observe events and issue high-level commands that are translated into in-game actions via the game/state managers. Agent decisions come from the separate `BeeCuriousService` Python project.
+
+## BeeCuriousService
+
+Start the service before launching an AI level 3 game:
+
+```bash
+cd ../BeeCuriousService
+PYTHONPATH=src python3 -m beecurious_service
+```
+
+Fabric connects to `http://127.0.0.1:8765` by default. Override it in `run/.env`:
+
+```dotenv
+BEECURIOUS_SERVICE_URL=http://127.0.0.1:8765
+```
 
 ---
 
@@ -49,11 +64,11 @@ Authoritative **gameplay state machine**.
 
 ### `beetrap.btfmc.agent`
 LLM-backed Agent & state machine that reacts to events and emits commands.
-- **`Agent`** — Holds the current `AgentState`, an instruction builder, a **queue of `AgentCommand`s**, and the OpenAI client handle. Key methods:
+- **`Agent`** — Holds the current `AgentState`, world-context builder, and a queue of `AgentCommand`s. Key methods:
   - `tick()` → drives the agent each server tick
   - `onChatMessageReceived(ServerPlayerEntity, String)` → forwards text to current state
   - `onGameStart()` → lifecycle hook
-  - `onGptResponseReceived(Response, Throwable)` → parses JSON into `AgentCommand`s and enqueues them
+  - `RemotePhysicalAgent.sendGptEventMessage(...)` → sends events to `BeeCuriousService` and enqueues returned commands
 - Subpackages (seen in imports):
   - `agent.physical.PhysicalAgent` — a concrete agent for “physical” action level (`AGENT_LEVEL_PHYSICAL`)
   - `agent.empty.EmptyAgent` — a no‑op or placeholder agent
@@ -70,9 +85,8 @@ Typed networking payloads and helpers.
 - **S2C payloads** (server → client): e.g., `BeetrapLogS2CPayload` and other UI/logging/choice prompts
 - **`NetworkingService`** — one-stop helper for sending server → client messages
 
-### `beetrap.btfmc.openai`
-OpenAI integration & client configuration.
-- **`OpenAiUtil`** — loads credentials, constructs an `OpenAIClient`, and exposes it to the `Agent`
+### `BeeCuriousService`
+Prompting, model calls, conversation history, and command validation live in the Python service. Fabric's `RemotePhysicalAgent` sends events over HTTP and executes returned commands locally.
 
 ---
 
@@ -80,7 +94,7 @@ OpenAI integration & client configuration.
 
 ### High level
 1. **Fabric** calls `ModInitializer.onInitialize()` in **`beetrap.btfmc.Beetrapfabricmc`**.
-2. **Environment & OpenAI** are initialized.
+2. **Environment and service configuration** are initialized.
 3. **Handlers** are registered (events, commands, networking, entities).
 4. The mod is now idle until commands create a `BeetrapGame`. Once a game exists, ticks/chat/payloads flow into it.
 
@@ -88,14 +102,13 @@ OpenAI integration & client configuration.
 - `Beetrapfabricmc.onInitialize()`:
   1. `loadEnv()`  
      - Collects required properties (from process env / system props; if any are missing, attempts to load a local **`.env`** file).  
-       **Required keys** (as seen in code): `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`, `TYPECAST_API_KEY`.
-  2. `OpenAiUtil.load()` → build the OpenAI client used by `Agent`
-  3. `BeetrapGameHandler.registerEvents()` →
+       `BEECURIOUS_SERVICE_URL` defaults to `http://127.0.0.1:8765`.
+  2. `BeetrapGameHandler.registerEvents()` →
      - `ServerTickEvents.START_WORLD_TICK` → `BeetrapGameHandler.onWorldTick(...)`
      - `ServerMessageEvents.CHAT_MESSAGE` → `BeetrapGameHandler.onChatMessageReceived(...)`
-  4. `CommandHandler.registerCommands()` → registers server commands (Brigadier)
-  5. `NetworkHandler.registerCustomPayloads()` → registers C2S/S2C packet handlers
-  6. `EntityHandler.registerEntities()` → registers custom entities
+  3. `CommandHandler.registerCommands()` → registers server commands (Brigadier)
+  4. `NetworkHandler.registerCustomPayloads()` → registers C2S/S2C packet handlers
+  5. `EntityHandler.registerEntities()` → registers custom entities
 
 > At this point, the mod is initialized. **No game is running yet**.
 
@@ -109,7 +122,7 @@ OpenAI integration & client configuration.
   - `ServerMessageEvents.CHAT_MESSAGE`  
     → `BeetrapGameHandler.onChatMessageReceived(signedMessage, player, params)`  
     → `BeetrapGame.onChatMessageMessage(...)`  
-    → `Agent.onChatMessageReceived(player, text)` → state-driven handling; may call OpenAI and enqueue `AgentCommand`s; when responses arrive: `Agent.onGptResponseReceived(...)` → commands executed via state/services.
+    → `Agent.onChatMessageReceived(player, text)` → state-driven handling → `BeeCuriousService` → returned commands are queued and executed locally.
 - **Custom payloads (client → server)**
   - `MultipleChoiceSelectionResultC2SPayload` → `BeetrapGame.onMultipleChoiceSelectionResultReceived(id, option)`
   - `PlayerTargetNewEntityC2SPayload` → `BeetrapGame.onPlayerTargetNewEntity(player, exists, entityId)`
@@ -132,14 +145,13 @@ When `CommandHandler` creates a new `BeetrapGame(server, bottomLeft, topRight, a
 
 Create a `.env` in the server working directory (or set real env vars) with:
 ```dotenv
-OPENAI_API_KEY=...
-OPENAI_BASE_URL=...
-OPENAI_ORG_ID=...
-OPENAI_PROJECT_ID=...
+BEECURIOUS_SERVICE_URL=http://127.0.0.1:8765
 TYPECAST_API_KEY=...
+# Optional: used by client-side speech-to-text
+OPENAI_API_KEY=...
 ```
 
-> On startup, you should see a log line confirming that all required keys were found.
+> Agent model credentials belong in `BeeCuriousService`, not the Fabric `.env`.
 
 ---
 
@@ -156,7 +168,7 @@ TYPECAST_API_KEY=...
 
 ## Troubleshooting
 
-- **Missing/OpenAI keys**: startup logs will warn if required keys cannot be found. Ensure `.env` exists or set actual environment variables.
+- **Agent unavailable**: start `BeeCuriousService` and verify `BEECURIOUS_SERVICE_URL`.
 - **No game activity**: the mod initializes quietly; run the start command from `CommandHandler` to create a game.
 - **Packets not received**: verify `NetworkHandler.registerCustomPayloads()` ran (it does during `onInitialize`) and that the client mod is aligned with the same payload ids.
 
@@ -165,4 +177,4 @@ TYPECAST_API_KEY=...
 ## Credits
 
 - Fabric Loader/API  
-- OpenAI client (used by `Agent` via `OpenAiUtil`)
+- BeeCuriousService Python agent runtime

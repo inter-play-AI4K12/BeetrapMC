@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 **BeeTrap** is a Minecraft Fabric mod (1.21.4, Java 21) — an educational game using bee pollination as an analogy to teach kids about AI filter bubbles in recommendation systems. As players pollinate flowers, similar ones grow, mirroring algorithmic echo chambers; players learn diversification to break the cycle.
 
-**BeeCurious** extends BeeTrap with an embodied conversational AI agent named **Bip** — a bee-like character that talks with players, asks reflective questions, and makes AI concepts more relatable. Bip is powered by OpenAI and optionally uses Typecast for voice.
+**BeeCurious** extends BeeTrap with an embodied conversational AI agent named **Bip** — a bee-like character that talks with players, asks reflective questions, and makes AI concepts more relatable. Agent decisions are provided by the sibling `BeeCuriousService` Python project. Fabric executes Bip's physical actions and optionally uses Typecast for voice.
 
 *Research project — Interplay Lab, CS Dept, University of Rochester.*
 
@@ -32,11 +32,10 @@ No test suite exists — testing is manual via the game client.
 Place a `.env` file at `run/.env` (the Minecraft working directory, not the project root):
 
 ```
-OPENAI_API_KEY=...
-OPENAI_BASE_URL=...
-OPENAI_ORG_ID=...
-OPENAI_PROJECT_ID=...
+BEECURIOUS_SERVICE_URL=http://127.0.0.1:8765
 TYPECAST_API_KEY=...
+# Optional: client-side speech-to-text only
+OPENAI_API_KEY=...
 ```
 
 Loaded in `Beetrapfabricmc.onInitialize()` before any game logic runs.
@@ -50,7 +49,7 @@ Loaded in `Beetrapfabricmc.onInitialize()` before any game logic runs.
 
 ## Logs
 
-Runtime logs (including OpenAI calls and agent decisions) are written to:
+Runtime logs (including remote agent events and decisions) are written to:
 
 ```
 run/beetrap/logs/beetrap-fabricmc-[timestamp].log
@@ -60,7 +59,7 @@ run/beetrap/logs/beetrap-fabricmc-[timestamp].log
 
 ### Mod Entry Points
 
-- **Server:** `Beetrapfabricmc.java` — `ModInitializer`, loads env vars, initializes OpenAI, registers all handlers
+- **Server:** `Beetrapfabricmc.java` — `ModInitializer`, loads env vars and registers all handlers
 - **Client:** `BeetrapfabricmcClient.java` — `ClientModInitializer`, registers renderers, screens, and C2S/S2C networking
 
 Source sets are split: `src/main/java/` (server-side) and `src/client/java/` (client-side), enforced by Fabric Loom.
@@ -90,7 +89,7 @@ Fabric Events / Commands
 | `Agent` (abstract) | LLM-backed agent base with `AgentState` machine and command queue |
 | `FlowerManager` | Spawns and tracks flower entities (using falling blocks) in the bounded garden |
 | `BeeNestController` | Spawns and animates the bee nest block toward pollination targets |
-| `OpenAiUtil` | Singleton OpenAI client setup and API call helpers |
+| `RemoteAgentClient` | HTTP client for BeeCuriousService sessions and events |
 | `NetworkingService` | Broadcasts S2C packets to all connected players |
 
 ### Game Lifecycle
@@ -111,7 +110,8 @@ All payload types live under `networking/`; registration happens in `NetworkHand
 
 `Agent` is an abstract base with an `AgentState` state machine and a command queue. Three concrete subtypes exist under `agent/`:
 
-- `physical/PhysicalAgent` — AI level 3; sends physical actions to the game world (moves bee nest, triggers pollinates) via OpenAI tool-calling that returns structured `AgentCommand` objects
+- `physical/PhysicalAgent` — owns Bip's Minecraft bee entity and physical command execution
+- `remote/RemotePhysicalAgent` — AI level 3; sends events to BeeCuriousService and queues returned `AgentCommand` objects
 - `chatonly/` — communicates through chat only, no physical presence
 - `empty/EmptyAgent` — no-op placeholder for games without AI
 
