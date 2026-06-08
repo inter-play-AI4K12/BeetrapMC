@@ -65,35 +65,58 @@ public class MenuState extends BeetrapState {
                 usingDiversifyingRankingMethod, pollinationCircleRadius,
                 amountOfFlowersToWither);
 
-        // start with consent screen
-        this.stage = STAGE_CONSENT;
         this.activityNumber = NO_ACTIVITY;
-        this.textInput = "";
-        this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
-                CONSENT_SCREEN_ID,
-                "Do you consent to your data being recorded (for study purposes)?",
-                "YES",
-                "NO"));
-
+        this.textInput = Beetrapfabricmc.USERNAME != null ? Beetrapfabricmc.USERNAME : "";
         this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.SESSION_ID);
+
+        if (Beetrapfabricmc.CONSENT_ANSWERED) {
+            // Consent + name already handled this session — go straight to activity selection
+            this.stage = STAGE_ACTIVITY;
+            this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
+                    ACTIVITY_SELECTION_SCREEN_ID,
+                    "Select an activity!",
+                    "Observe flowers only",
+                    "What is the filter bubble effect?",
+                    "How does the garden recommend flowers?",
+                    "How do we break the filter bubble?",
+                    "Mysterious Fifth Activity"));
+        } else {
+            // First time — start with consent screen
+            this.stage = STAGE_CONSENT;
+            this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
+                    CONSENT_SCREEN_ID,
+                    "Do you consent to your data being recorded (for study purposes)?",
+                    "YES",
+                    "NO"));
+        }
     }
 
     @Override
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
         if (this.stage == STAGE_CONSENT && questionId.equals(CONSENT_SCREEN_ID)) {
+            Beetrapfabricmc.CONSENT_ANSWERED = true;
             if (option == CONSENT_YES) {
                 Beetrapfabricmc.PLAYER_DATA_CONSENT = true;
                 LOG.info("Player consented to data recording.");
                 this.net.beetrapLog("DATA_CONSENT", "yes");
+                // Collect name before showing activity selection
+                this.stage = STAGE_TEXT_INPUT;
+                this.net.broadcastCustomPayload(new ShowTextInputScreenS2CPayload(
+                        TEXT_INPUT_SCREEN_ID,
+                        "Please enter your name:"));
             } else {
                 LOG.info("Player did not consent to data recording.");
-                this.net.beetrapLog("DATA_CONSENT", "no");
+                // Skip name collection — go straight to activity selection
+                this.stage = STAGE_ACTIVITY;
+                this.net.broadcastCustomPayload(new ShowMultipleChoiceScreenS2CPayload(
+                        ACTIVITY_SELECTION_SCREEN_ID,
+                        "Select an activity!",
+                        "Observe flowers only",
+                        "What is the filter bubble effect?",
+                        "How does the garden recommend flowers?",
+                        "How do we break the filter bubble?",
+                        "Mysterious Fifth Activity"));
             }
-            // advance to text input stage
-            this.stage = STAGE_TEXT_INPUT;
-            this.net.broadcastCustomPayload(new ShowTextInputScreenS2CPayload(
-                    TEXT_INPUT_SCREEN_ID,
-                    "Please enter your name:"));
             return;
         }
 

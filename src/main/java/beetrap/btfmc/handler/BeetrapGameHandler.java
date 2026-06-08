@@ -1,6 +1,7 @@
 package beetrap.btfmc.handler;
 
 import beetrap.btfmc.BeetrapGame;
+import beetrap.btfmc.Beetrapfabricmc;
 import beetrap.btfmc.networking.MultipleChoiceSelectionResultC2SPayload;
 import beetrap.btfmc.networking.PlayerPollinateC2SPayload;
 import beetrap.btfmc.networking.PlayerTargetNewEntityC2SPayload;
@@ -136,10 +137,21 @@ public final class BeetrapGameHandler {
         }
     }
 
+    public static void onPlayerDisconnect(ServerPlayNetworkHandler serverPlayNetworkHandler,
+            MinecraftServer minecraftServer) {
+        destroyGame();
+        pendingAutoStartServer = null;
+        pendingAutoStartTicks = 0;
+        Beetrapfabricmc.CONSENT_ANSWERED = false;
+        Beetrapfabricmc.PLAYER_DATA_CONSENT = false;
+        Beetrapfabricmc.USERNAME = null;
+    }
+
     public static void registerEvents() {
         ServerTickEvents.START_WORLD_TICK.register(BeetrapGameHandler::onWorldTick);
         ServerMessageEvents.CHAT_MESSAGE.register(BeetrapGameHandler::onChatMessageReceived);
         ServerPlayConnectionEvents.JOIN.register(BeetrapGameHandler::onPlayerJoin);
+        ServerPlayConnectionEvents.DISCONNECT.register(BeetrapGameHandler::onPlayerDisconnect);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             destroyGame();
             pendingAutoStartServer = null;

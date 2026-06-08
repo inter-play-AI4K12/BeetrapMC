@@ -22,6 +22,7 @@ import org.apache.logging.log4j.Logger;
 public class Beetrapfabricmc implements ModInitializer {
 
     public static boolean PLAYER_DATA_CONSENT = false;
+    public static boolean CONSENT_ANSWERED = false;
     public static String USERNAME = null;
     public static String SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
     public static String TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
