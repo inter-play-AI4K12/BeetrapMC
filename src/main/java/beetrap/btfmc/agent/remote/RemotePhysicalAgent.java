@@ -30,6 +30,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private static final String SERVICE_URL_KEY = "BEECURIOUS_SERVICE_URL";
     private static final String DEFAULT_SERVICE_URL = "http://127.0.0.1:8765";
     private static final int HEARTBEAT_INTERVAL_TICKS = 20;
+    private static final double PLAYER_BUMP_DISTANCE = 1.0;
 
     private final RemoteAgentClient remoteAgentClient;
     private final Object connectionLock;
@@ -37,7 +38,10 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private final Queue<PendingEvent> pendingEvents;
     private CompletableFuture<Void> eventChain;
     private String agentSessionId;
+    private Vec3d lastBeeNestPosition;
     private int heartbeatTicks;
+    private boolean beeNestMoving;
+    private boolean touchingPlayer;
     private boolean connectionFailed;
     private boolean connecting;
     private boolean closed;
@@ -58,6 +62,9 @@ public class RemotePhysicalAgent extends PhysicalAgent {
 
     @Override
     protected void tickCustom() {
+        this.detectPlayerBump();
+        this.detectBeeNestMovement();
+
         synchronized(this.connectionLock) {
             if(this.closed || this.agentSessionId == null) {
                 this.heartbeatTicks = 0;
@@ -82,7 +89,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     public void sendGptEventMessage(EventMessage eventMessage) {
         PendingEvent pendingEvent = new PendingEvent(eventMessage.toJsonString(),
                 this.instructionBuilder.contextInstructionBuilder().toString(),
-                List.of(), List.of());
+                List.of(), List.of(), List.of());
         String activeSessionId;
 
         synchronized(this.connectionLock) {
@@ -127,6 +134,8 @@ public class RemotePhysicalAgent extends PhysicalAgent {
                             this.reconnectAfterExpiredSession(activeSessionId, event);
                         } else {
                             LOG.error("BeeCuriousService failed to handle agent event", throwable);
+                            this.getBeetrapStateManager().requeueAgentEvents(
+                                    event.agentEvents());
                         }
                         return null;
                     });
@@ -231,8 +240,10 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private void sendHeartbeat() {
         List<String> completed = this.getCompletedCommandIds();
         List<String> failed = this.getFailedCommandIds();
+        List<Map<String, Object>> events =
+                this.getBeetrapStateManager().drainAgentEvents();
         EventMessage heartbeat = new AgentTickEventMessage(
-                this.buildSnapshot(),
+                this.buildSnapshot(events),
                 this.buildExecutionSnapshot(completed, failed)
         );
         String activeSessionId;
@@ -246,15 +257,19 @@ public class RemotePhysicalAgent extends PhysicalAgent {
                             heartbeat.toJsonString(),
                             "",
                             completed,
-                            failed
+                            failed,
+                            events
                     )
             );
         }
     }
 
-    private Map<String, Object> buildSnapshot() {
+    private Map<String, Object> buildSnapshot(List<Map<String, Object>> events) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("game_tick", this.world.getTime());
+        snapshot.put("current_diversity",
+                this.getBeetrapStateManager().getCurrentDiversityScore());
+        snapshot.put("events", events);
 
         ServerPlayerEntity player = this.world.getPlayers().isEmpty()
                 ? null : this.world.getPlayers().getFirst();
@@ -265,6 +280,54 @@ public class RemotePhysicalAgent extends PhysicalAgent {
         snapshot.put("agent", this.entitySnapshot(bee.getPos(), bee.getHeadYaw()));
         snapshot.put("flowers", this.buildFlowerSnapshot());
         return snapshot;
+    }
+
+    private void detectPlayerBump() {
+        if(this.world.getPlayers().isEmpty()) {
+            this.touchingPlayer = false;
+            return;
+        }
+        ServerPlayerEntity player = this.world.getPlayers().getFirst();
+        Vec3d agentPosition = this.getBeeEntity().getPos();
+        double distance = agentPosition.distanceTo(player.getPos());
+        boolean touching = this.getBeeEntity().getBoundingBox()
+                .expand(PLAYER_BUMP_DISTANCE / 2)
+                .intersects(player.getBoundingBox());
+        if(touching && !this.touchingPlayer) {
+            this.getBeetrapStateManager().recordAgentEvent(
+                    "agent_bumped_player",
+                    Map.of(
+                            "distance", distance,
+                            "agent_position", positionList(agentPosition),
+                            "player_position", positionList(player.getPos())
+                    )
+            );
+        }
+        this.touchingPlayer = touching;
+    }
+
+    private void detectBeeNestMovement() {
+        Vec3d currentPosition = this.getBeetrapStateManager()
+                .getBeeNestController()
+                .getBeeNestPosition();
+        boolean moving = this.lastBeeNestPosition != null
+                && currentPosition.distanceTo(this.lastBeeNestPosition) > 0.01;
+        if(moving && !this.beeNestMoving) {
+            this.getBeetrapStateManager().recordAgentEvent(
+                    "beehive_moving",
+                    Map.of(
+                            "from", positionList(this.lastBeeNestPosition),
+                            "to", positionList(currentPosition),
+                            "distance", currentPosition.distanceTo(this.lastBeeNestPosition)
+                    )
+            );
+        }
+        this.beeNestMoving = moving;
+        this.lastBeeNestPosition = currentPosition;
+    }
+
+    private static List<Double> positionList(Vec3d position) {
+        return List.of(position.x, position.y, position.z);
     }
 
     private Map<String, Object> entitySnapshot(Vec3d position, Float headYaw) {
@@ -315,7 +378,8 @@ public class RemotePhysicalAgent extends PhysicalAgent {
             String eventJson,
             String context,
             List<String> completedCommandIds,
-            List<String> failedCommandIds
+            List<String> failedCommandIds,
+            List<Map<String, Object>> agentEvents
     ) {
     }
 }

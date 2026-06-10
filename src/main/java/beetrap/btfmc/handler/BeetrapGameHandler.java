@@ -8,6 +8,7 @@ import beetrap.btfmc.networking.PlayerTargetNewEntityC2SPayload;
 import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload;
 import beetrap.btfmc.networking.PollinationCircleRadiusIncreaseRequestC2SPayload;
 import beetrap.btfmc.networking.TextInputResultC2SPayload;
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
@@ -21,6 +22,7 @@ import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.GameMode;
+import net.minecraft.util.ActionResult;
 import org.joml.Vector3i;
 
 public final class BeetrapGameHandler {
@@ -151,6 +153,12 @@ public final class BeetrapGameHandler {
     public static void registerEvents() {
         ServerTickEvents.START_WORLD_TICK.register(BeetrapGameHandler::onWorldTick);
         ServerMessageEvents.CHAT_MESSAGE.register(BeetrapGameHandler::onChatMessageReceived);
+        AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if(!world.isClient() && hasGame() && player instanceof ServerPlayerEntity serverPlayer) {
+                game.onPlayerAttackEntity(serverPlayer, hand, entity);
+            }
+            return ActionResult.PASS;
+        });
         ServerPlayConnectionEvents.JOIN.register(BeetrapGameHandler::onPlayerJoin);
         ServerPlayConnectionEvents.DISCONNECT.register(BeetrapGameHandler::onPlayerDisconnect);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {

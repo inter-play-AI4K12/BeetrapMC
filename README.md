@@ -26,7 +26,9 @@ Fabric sends `game_session_id`, logging consent, and an optional pseudonymous pa
 and returns its agent ID and version.
 
 Fabric sends a lightweight `agent_tick` snapshot every second for remote profiles. It includes
-the current game tick, player and agent positions, compact flower state, and command queue IDs.
+the current game tick, current diversity, player and agent positions, compact flower state,
+buffered game events, and command queue IDs. Events include agent movement, agent-player bumps,
+player attacks on the agent, pollination start/end, bud rankings, and beehive movement.
 Python keeps bounded in-memory history, returns only unacknowledged commands, and uses the data
 for profile-specific behavior such as Bip 3's stationary-player check. BeeCuriousService logs
 that same unified state as `game_state`; the client no longer emits a separate `PLAYER_POS`

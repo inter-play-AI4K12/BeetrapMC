@@ -5,6 +5,7 @@ import beetrap.btfmc.state.BeetrapStateManager;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentHashMap;
@@ -129,6 +130,12 @@ public abstract class Agent implements AutoCloseable {
 
     public void markCommandStarted(AgentCommand command) {
         this.currentCommandId = command.commandId();
+        if(command.type().equalsIgnoreCase("fly_to")) {
+            this.beetrapStateManager.recordAgentEvent("agent_moving", Map.of(
+                    "command_id", command.commandId(),
+                    "target", List.of(command.args())
+            ));
+        }
     }
 
     public AgentCommand completeNextCommand() {
