@@ -26,6 +26,11 @@ public class AgentCommandDeserializer extends StdDeserializer<AgentCommand> {
             args[i] = argsNode.get(i).asText();
         }
 
-        return new AgentCommand(node.get("type").asText(), args);
+        JsonNode commandIdNode = node.get("command_id");
+        if(commandIdNode == null || commandIdNode.asText().isBlank()) {
+            throw new IOException("Agent command did not contain command_id");
+        }
+
+        return new AgentCommand(commandIdNode.asText(), node.get("type").asText(), args);
     }
 }

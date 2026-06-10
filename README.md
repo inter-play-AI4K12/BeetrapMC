@@ -25,6 +25,12 @@ Fabric sends `game_session_id`, logging consent, and an optional pseudonymous pa
 `BeeCuriousService` creates a separate `agent_session_id`, chooses the configured agent profile,
 and returns its agent ID and version.
 
+Fabric sends a lightweight `agent_tick` snapshot every second for remote profiles. It includes
+the current game tick, player and agent positions, compact flower state, and command queue IDs.
+Python keeps bounded in-memory history, returns only unacknowledged commands, and uses the data
+for profile-specific behavior such as Bip 3's stationary-player check. Loki remains an
+asynchronous audit log rather than the real-time state source.
+
 ---
 
 ## Packages & What They Do

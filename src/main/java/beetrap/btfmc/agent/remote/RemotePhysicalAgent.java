@@ -2,15 +2,23 @@ package beetrap.btfmc.agent.remote;
 
 import beetrap.btfmc.Beetrapfabricmc;
 import beetrap.btfmc.agent.AgentCommand;
+import beetrap.btfmc.agent.event.AgentTickEventMessage;
 import beetrap.btfmc.agent.event.EventMessage;
 import beetrap.btfmc.agent.physical.PhysicalAgent;
 import beetrap.btfmc.agent.remote.RemoteAgentClient.RemoteAgentHttpException;
 import beetrap.btfmc.agent.remote.RemoteAgentClient.RemoteAgentSession;
 import beetrap.btfmc.state.BeetrapStateManager;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
+import net.minecraft.entity.passive.BeeEntity;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.Vec3d;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -21,6 +29,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private static final Logger LOG = LogManager.getLogger(RemotePhysicalAgent.class);
     private static final String SERVICE_URL_KEY = "BEECURIOUS_SERVICE_URL";
     private static final String DEFAULT_SERVICE_URL = "http://127.0.0.1:8765";
+    private static final int HEARTBEAT_INTERVAL_TICKS = 20;
 
     private final RemoteAgentClient remoteAgentClient;
     private final Object connectionLock;
@@ -28,6 +37,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private final Queue<PendingEvent> pendingEvents;
     private CompletableFuture<Void> eventChain;
     private String agentSessionId;
+    private int heartbeatTicks;
     private boolean connectionFailed;
     private boolean connecting;
     private boolean closed;
@@ -42,13 +52,37 @@ public class RemotePhysicalAgent extends PhysicalAgent {
         this.eventLock = new Object();
         this.pendingEvents = new ArrayDeque<>();
         this.eventChain = CompletableFuture.completedFuture(null);
+        this.heartbeatTicks = 0;
         this.startSessionConnection();
+    }
+
+    @Override
+    protected void tickCustom() {
+        synchronized(this.connectionLock) {
+            if(this.closed || this.agentSessionId == null) {
+                this.heartbeatTicks = 0;
+                return;
+            }
+        }
+
+        synchronized(this.eventLock) {
+            if(!this.eventChain.isDone()) {
+                return;
+            }
+        }
+
+        this.heartbeatTicks++;
+        if(this.heartbeatTicks >= HEARTBEAT_INTERVAL_TICKS) {
+            this.heartbeatTicks = 0;
+            this.sendHeartbeat();
+        }
     }
 
     @Override
     public void sendGptEventMessage(EventMessage eventMessage) {
         PendingEvent pendingEvent = new PendingEvent(eventMessage.toJsonString(),
-                this.instructionBuilder.contextInstructionBuilder().toString());
+                this.instructionBuilder.contextInstructionBuilder().toString(),
+                List.of(), List.of());
         String activeSessionId;
 
         synchronized(this.connectionLock) {
@@ -75,9 +109,17 @@ public class RemotePhysicalAgent extends PhysicalAgent {
                             event.eventJson(), event.context()))
                     .thenAccept(commands -> {
                         for(AgentCommand command : commands) {
-                            LOG.info("Queueing remote agent command: {}", command);
-                            this.addCommand(command);
+                            if(this.addCommand(command)) {
+                                LOG.info("Queueing remote agent command: {}", command);
+                            } else {
+                                LOG.debug("Ignoring duplicate remote command {}",
+                                        command.commandId());
+                            }
                         }
+                        this.acknowledgeCommandStatuses(
+                                event.completedCommandIds(),
+                                event.failedCommandIds()
+                        );
                     })
                     .exceptionally(throwable -> {
                         if(this.isSessionNotFound(throwable)) {
@@ -139,6 +181,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
             }
             if(expiredSessionId.equals(this.agentSessionId)) {
                 this.agentSessionId = null;
+                this.heartbeatTicks = 0;
             }
             this.pendingEvents.add(event);
         }
@@ -163,6 +206,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
             this.closed = true;
             this.pendingEvents.clear();
             activeSessionId = this.agentSessionId;
+            this.heartbeatTicks = 0;
         }
         if(activeSessionId != null) {
             this.remoteAgentClient.closeSession(activeSessionId);
@@ -184,6 +228,94 @@ public class RemotePhysicalAgent extends PhysicalAgent {
         return DEFAULT_SERVICE_URL;
     }
 
-    private record PendingEvent(String eventJson, String context) {
+    private void sendHeartbeat() {
+        List<String> completed = this.getCompletedCommandIds();
+        List<String> failed = this.getFailedCommandIds();
+        EventMessage heartbeat = new AgentTickEventMessage(
+                this.buildSnapshot(),
+                this.buildExecutionSnapshot(completed, failed)
+        );
+        String activeSessionId;
+        synchronized(this.connectionLock) {
+            activeSessionId = this.agentSessionId;
+        }
+        if(activeSessionId != null) {
+            this.sendEvent(
+                    activeSessionId,
+                    new PendingEvent(
+                            heartbeat.toJsonString(),
+                            "",
+                            completed,
+                            failed
+                    )
+            );
+        }
+    }
+
+    private Map<String, Object> buildSnapshot() {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("game_tick", this.world.getTime());
+
+        ServerPlayerEntity player = this.world.getPlayers().isEmpty()
+                ? null : this.world.getPlayers().getFirst();
+        snapshot.put("player", this.entitySnapshot(player == null ? null : player.getPos(),
+                player == null ? null : player.getHeadYaw()));
+
+        BeeEntity bee = this.getBeeEntity();
+        snapshot.put("agent", this.entitySnapshot(bee.getPos(), bee.getHeadYaw()));
+        snapshot.put("flowers", this.buildFlowerSnapshot());
+        return snapshot;
+    }
+
+    private Map<String, Object> entitySnapshot(Vec3d position, Float headYaw) {
+        Map<String, Object> entity = new LinkedHashMap<>();
+        if(position == null) {
+            entity.put("position", List.of(0.0, 0.0, 0.0));
+        } else {
+            entity.put("position", List.of(position.x, position.y, position.z));
+        }
+        if(headYaw != null) {
+            entity.put("head_yaw", headYaw);
+        }
+        return entity;
+    }
+
+    private Map<String, Object> buildFlowerSnapshot() {
+        List<Map<String, Object>> flowers = new ArrayList<>();
+        BeetrapStateManager stateManager = this.getBeetrapStateManager();
+        for(beetrap.btfmc.flower.Flower flower : stateManager.getState()) {
+            Vec3d position = stateManager.getFlowerManager()
+                    .getFlowerMinecraftPosition(stateManager.getState(), flower);
+            if(position == null) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", flower.getNumber());
+            item.put("position", List.of(position.x, position.y, position.z));
+            item.put("color", stateManager.getFlowerManager()
+                    .getFlowerMinecraftColor(flower));
+            item.put("withered", flower.hasWithered());
+            flowers.add(item);
+        }
+        return Map.of("count", flowers.size(), "items", flowers);
+    }
+
+    private Map<String, Object> buildExecutionSnapshot(
+            List<String> completed,
+            List<String> failed) {
+        Map<String, Object> execution = new LinkedHashMap<>();
+        execution.put("current_command_id", this.getCurrentCommandId());
+        execution.put("queued_command_ids", this.getQueuedCommandIds());
+        execution.put("completed_command_ids", completed);
+        execution.put("failed_command_ids", failed);
+        return execution;
+    }
+
+    private record PendingEvent(
+            String eventJson,
+            String context,
+            List<String> completedCommandIds,
+            List<String> failedCommandIds
+    ) {
     }
 }

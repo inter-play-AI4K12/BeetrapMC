@@ -275,7 +275,7 @@ public class PhysicalAgentState extends AgentState {
 
     public void completeCommand() {
         synchronized(this.currentCommandLock) {
-            this.agent.removeNextCommand();
+            this.agent.completeNextCommand();
             this.currentCommand = null;
             this.commandTick = -1;
         }
@@ -297,6 +297,7 @@ public class PhysicalAgentState extends AgentState {
             synchronized(this.currentCommandLock) {
                 if(this.currentCommand == null) {
                     this.currentCommand = this.agent.getNextCommand();
+                    this.agent.markCommandStarted(this.currentCommand);
                 }
 
                 ++this.commandTick;

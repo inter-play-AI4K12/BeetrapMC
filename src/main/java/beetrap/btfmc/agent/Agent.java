@@ -2,8 +2,12 @@ package beetrap.btfmc.agent;
 
 import beetrap.btfmc.agent.event.EventMessage;
 import beetrap.btfmc.state.BeetrapStateManager;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentHashMap;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.network.packet.Packet;
@@ -24,6 +28,10 @@ public abstract class Agent implements AutoCloseable {
     protected final String name;
     private final BeetrapStateManager beetrapStateManager;
     protected Deque<AgentCommand> agentCommandQueue;
+    private final Set<String> knownCommandIds;
+    private final Deque<String> completedCommandIds;
+    private final Deque<String> failedCommandIds;
+    private volatile String currentCommandId;
     protected AgentState currentState;
     protected InstructionBuilder instructionBuilder;
 
@@ -34,6 +42,9 @@ public abstract class Agent implements AutoCloseable {
         this.name = name;
         this.setCurrentAgentState(initialAgentState);
         this.agentCommandQueue = new ConcurrentLinkedDeque<>();
+        this.knownCommandIds = ConcurrentHashMap.newKeySet();
+        this.completedCommandIds = new ConcurrentLinkedDeque<>();
+        this.failedCommandIds = new ConcurrentLinkedDeque<>();
         this.instructionBuilder = new InstructionBuilder();
     }
 
@@ -104,20 +115,65 @@ public abstract class Agent implements AutoCloseable {
         return this.name;
     }
 
-    public void addCommand(AgentCommand agentCommand) {
+    public boolean addCommand(AgentCommand agentCommand) {
+        if(!this.knownCommandIds.add(agentCommand.commandId())) {
+            return false;
+        }
         this.agentCommandQueue.addLast(agentCommand);
+        return true;
     }
 
     public AgentCommand getNextCommand() {
         return this.agentCommandQueue.getFirst();
     }
 
-    public AgentCommand removeNextCommand() {
-        return this.agentCommandQueue.removeFirst();
+    public void markCommandStarted(AgentCommand command) {
+        this.currentCommandId = command.commandId();
+    }
+
+    public AgentCommand completeNextCommand() {
+        AgentCommand command = this.agentCommandQueue.removeFirst();
+        this.currentCommandId = null;
+        this.completedCommandIds.addLast(command.commandId());
+        return command;
+    }
+
+    public AgentCommand failNextCommand() {
+        AgentCommand command = this.agentCommandQueue.removeFirst();
+        this.currentCommandId = null;
+        this.failedCommandIds.addLast(command.commandId());
+        return command;
     }
 
     public boolean hasNextCommand() {
         return !this.agentCommandQueue.isEmpty();
+    }
+
+    public String getCurrentCommandId() {
+        return this.currentCommandId;
+    }
+
+    public List<String> getQueuedCommandIds() {
+        List<String> commandIds = new ArrayList<>();
+        for(AgentCommand command : this.agentCommandQueue) {
+            if(!command.commandId().equals(this.currentCommandId)) {
+                commandIds.add(command.commandId());
+            }
+        }
+        return commandIds;
+    }
+
+    public List<String> getCompletedCommandIds() {
+        return List.copyOf(this.completedCommandIds);
+    }
+
+    public List<String> getFailedCommandIds() {
+        return List.copyOf(this.failedCommandIds);
+    }
+
+    public void acknowledgeCommandStatuses(List<String> completed, List<String> failed) {
+        this.completedCommandIds.removeAll(completed);
+        this.failedCommandIds.removeAll(failed);
     }
 
     public InstructionBuilder getInstructionBuilder() {
