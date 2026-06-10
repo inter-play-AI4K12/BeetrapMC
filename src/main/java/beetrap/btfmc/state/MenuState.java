@@ -66,7 +66,8 @@ public class MenuState extends BeetrapState {
                 amountOfFlowersToWither);
 
         this.activityNumber = NO_ACTIVITY;
-        this.textInput = Beetrapfabricmc.USERNAME != null ? Beetrapfabricmc.USERNAME : "";
+        this.textInput = Beetrapfabricmc.PARTICIPANT_ID != null
+                ? Beetrapfabricmc.PARTICIPANT_ID : "";
         this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.SESSION_ID);
 
         if (Beetrapfabricmc.CONSENT_ANSWERED) {
@@ -103,7 +104,7 @@ public class MenuState extends BeetrapState {
                 this.stage = STAGE_TEXT_INPUT;
                 this.net.broadcastCustomPayload(new ShowTextInputScreenS2CPayload(
                         TEXT_INPUT_SCREEN_ID,
-                        "Please enter your name:"));
+                        "Please enter your participant code:"));
             } else {
                 LOG.info("Player did not consent to data recording.");
                 // Skip name collection — go straight to activity selection
@@ -129,11 +130,10 @@ public class MenuState extends BeetrapState {
     @Override
     public void onTextInputScreenResultReceived(String screenId, String textInput) {
         if (this.stage == STAGE_TEXT_INPUT && screenId.equals(TEXT_INPUT_SCREEN_ID)) {
-            LOG.info("Player entered name: {}", textInput);
+            LOG.info("Player entered participant code: {}", textInput);
             this.textInput = textInput;
-            Beetrapfabricmc.USERNAME = textInput;
-            Beetrapfabricmc.SESSION_ID = Beetrapfabricmc.USERNAME + "_" + Beetrapfabricmc.SESSION_ID;
-            this.net.beetrapLog("PLAYER_NAME", textInput);
+            Beetrapfabricmc.PARTICIPANT_ID = textInput;
+            this.net.beetrapLog("PARTICIPANT_ID", textInput);
             
             // advance to activity selection
             this.stage = STAGE_ACTIVITY;

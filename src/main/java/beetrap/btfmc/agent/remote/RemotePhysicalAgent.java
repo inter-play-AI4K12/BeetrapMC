@@ -1,9 +1,11 @@
 package beetrap.btfmc.agent.remote;
 
+import beetrap.btfmc.Beetrapfabricmc;
 import beetrap.btfmc.agent.AgentCommand;
 import beetrap.btfmc.agent.event.EventMessage;
 import beetrap.btfmc.agent.physical.PhysicalAgent;
 import beetrap.btfmc.agent.remote.RemoteAgentClient.RemoteAgentHttpException;
+import beetrap.btfmc.agent.remote.RemoteAgentClient.RemoteAgentSession;
 import beetrap.btfmc.state.BeetrapStateManager;
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -25,7 +27,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private final Object eventLock;
     private final Queue<PendingEvent> pendingEvents;
     private CompletableFuture<Void> eventChain;
-    private String sessionId;
+    private String agentSessionId;
     private boolean connectionFailed;
     private boolean connecting;
     private boolean closed;
@@ -53,7 +55,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
             if(this.closed) {
                 return;
             }
-            activeSessionId = this.sessionId;
+            activeSessionId = this.agentSessionId;
             if(activeSessionId == null) {
                 this.pendingEvents.add(pendingEvent);
             }
@@ -91,16 +93,20 @@ public class RemotePhysicalAgent extends PhysicalAgent {
 
     private void startSessionConnection() {
         synchronized(this.connectionLock) {
-            if(this.closed || this.connecting || this.sessionId != null) {
+            if(this.closed || this.connecting || this.agentSessionId != null) {
                 return;
             }
             this.connecting = true;
             this.connectionFailed = false;
         }
-        this.remoteAgentClient.createSession().whenComplete(this::onSessionCreated);
+        this.remoteAgentClient.createSession(
+                Beetrapfabricmc.SESSION_ID,
+                Beetrapfabricmc.PLAYER_DATA_CONSENT,
+                Beetrapfabricmc.PARTICIPANT_ID
+        ).whenComplete(this::onSessionCreated);
     }
 
-    private void onSessionCreated(String newSessionId, Throwable throwable) {
+    private void onSessionCreated(RemoteAgentSession newSession, Throwable throwable) {
         Queue<PendingEvent> eventsToSend = new ArrayDeque<>();
         synchronized(this.connectionLock) {
             this.connecting = false;
@@ -110,18 +116,19 @@ public class RemotePhysicalAgent extends PhysicalAgent {
                 return;
             }
             if(this.closed) {
-                this.remoteAgentClient.closeSession(newSessionId);
+                this.remoteAgentClient.closeSession(newSession.agentSessionId());
                 return;
             }
 
-            this.sessionId = newSessionId;
+            this.agentSessionId = newSession.agentSessionId();
             eventsToSend.addAll(this.pendingEvents);
             this.pendingEvents.clear();
         }
 
-        LOG.info("Connected Bip to BeeCuriousService session {}", newSessionId);
+        LOG.info("Connected {} profile {} to BeeCuriousService session {}",
+                newSession.agentName(), newSession.profileId(), newSession.agentSessionId());
         for(PendingEvent event : eventsToSend) {
-            this.sendEvent(newSessionId, event);
+            this.sendEvent(newSession.agentSessionId(), event);
         }
     }
 
@@ -130,8 +137,8 @@ public class RemotePhysicalAgent extends PhysicalAgent {
             if(this.closed) {
                 return;
             }
-            if(expiredSessionId.equals(this.sessionId)) {
-                this.sessionId = null;
+            if(expiredSessionId.equals(this.agentSessionId)) {
+                this.agentSessionId = null;
             }
             this.pendingEvents.add(event);
         }
@@ -155,7 +162,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
         synchronized(this.connectionLock) {
             this.closed = true;
             this.pendingEvents.clear();
-            activeSessionId = this.sessionId;
+            activeSessionId = this.agentSessionId;
         }
         if(activeSessionId != null) {
             this.remoteAgentClient.closeSession(activeSessionId);

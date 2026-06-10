@@ -3,7 +3,6 @@ package beetrap.btfmc;
 import beetrap.btfmc.handler.BeetrapGameHandler;
 import beetrap.btfmc.handler.CommandHandler;
 import beetrap.btfmc.handler.EntityHandler;
-import beetrap.btfmc.handler.LokiHandler;
 import beetrap.btfmc.handler.NetworkHandler;
 import java.io.File;
 import java.io.FileReader;
@@ -21,10 +20,10 @@ public class Beetrapfabricmc implements ModInitializer {
 
     public static boolean PLAYER_DATA_CONSENT = false;
     public static boolean CONSENT_ANSWERED = false;
-    public static String USERNAME = null;
-    public static String SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
-    public static String TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-    public static String SESSION_ID = SESSION_CODE + "_" + TIMESTAMP;
+    public static String PARTICIPANT_ID = null;
+    public static String SESSION_CODE;
+    public static String TIMESTAMP;
+    public static String SESSION_ID;
     public static final Logger LOG = LogManager.getLogger(Beetrapfabricmc.class);
     public static final String MOD_ID = "beetrap-fabricmc";
     public static final String MOD_REQUIRED_OPENAI_API_KEY = "OPENAI_API_KEY";
@@ -33,6 +32,12 @@ public class Beetrapfabricmc implements ModInitializer {
 
     public static String id(String name) {
         return MOD_ID + ":" + name;
+    }
+
+    public static void beginGameSession() {
+        SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
+        TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+        SESSION_ID = SESSION_CODE + "_" + TIMESTAMP;
     }
 
     private void loadEnv() {
@@ -60,7 +65,7 @@ public class Beetrapfabricmc implements ModInitializer {
     @Override
     public void onInitialize() {
         this.loadEnv();
-        // LokiHandler.pushLokiLog("beetrap server initialized");
+        beginGameSession();
         BeetrapGameHandler.registerEvents();
         CommandHandler.registerCommands();
         NetworkHandler.registerCustomPayloads();

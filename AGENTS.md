@@ -115,6 +115,9 @@ All payload types live under `networking/`; registration happens in `NetworkHand
 - `chatonly/` — communicates through chat only, no physical presence
 - `empty/EmptyAgent` — no-op placeholder for games without AI
 
+Agent profile selection is owned by BeeCuriousService. Fabric creates sessions with the
+service default and logs the resolved agent ID and version returned by the service.
+
 ### Utility Packages
 
 - `util/ClassicalMDS` — multidimensional scaling for flower layout

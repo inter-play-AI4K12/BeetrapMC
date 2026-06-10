@@ -44,6 +44,7 @@ public final class BeetrapGameHandler {
             return;
         }
 
+        Beetrapfabricmc.beginGameSession();
         game = new BeetrapGame(server, new Vector3i(-10, 0, -10), new Vector3i(10, 0, 10), aiLevel);
     }
 
@@ -144,7 +145,7 @@ public final class BeetrapGameHandler {
         pendingAutoStartTicks = 0;
         Beetrapfabricmc.CONSENT_ANSWERED = false;
         Beetrapfabricmc.PLAYER_DATA_CONSENT = false;
-        Beetrapfabricmc.USERNAME = null;
+        Beetrapfabricmc.PARTICIPANT_ID = null;
     }
 
     public static void registerEvents() {

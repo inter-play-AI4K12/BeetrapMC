@@ -52,11 +52,25 @@ public class RemoteAgentClient {
     /**
      * Creates an agent session without blocking the Minecraft server thread.
      */
-    public CompletableFuture<String> createSession() {
+    public CompletableFuture<RemoteAgentSession> createSession(String gameSessionId,
+            boolean loggingConsent, String participantId) {
+        String body;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("game_session_id", gameSessionId);
+            payload.put("logging_consent", loggingConsent);
+            if(participantId != null && !participantId.isBlank()) {
+                payload.put("participant_id", participantId);
+            }
+            body = OM.writeValueAsString(payload);
+        } catch(JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+
         HttpRequest request = HttpRequest.newBuilder(this.serviceBaseUri.resolve("/v1/sessions"))
                 .timeout(Duration.ofSeconds(5))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
         return this.httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
@@ -64,12 +78,17 @@ public class RemoteAgentClient {
                     try {
                         ensureSuccess(response);
                         Map<String, Object> payload = OM.readValue(response.body(), MAP_TYPE);
-                        Object sessionId = payload.get("session_id");
+                        Object sessionId = payload.get("agent_session_id");
                         if(!(sessionId instanceof String s) || s.isBlank()) {
                             throw new IOException(
-                                    "BeeCuriousService did not return a session_id");
+                                    "BeeCuriousService did not return an agent_session_id");
                         }
-                        return s;
+                        return new RemoteAgentSession(
+                                s,
+                                requiredString(payload, "agent"),
+                                requiredString(payload, "version"),
+                                requiredString(payload, "agent_name")
+                        );
                     } catch(IOException e) {
                         throw new RuntimeException(e);
                     }
@@ -79,7 +98,7 @@ public class RemoteAgentClient {
     /**
      * Sends an event and returns commands that Fabric can execute.
      */
-    public CompletableFuture<AgentCommand[]> sendEvent(String sessionId, String eventJson,
+    public CompletableFuture<AgentCommand[]> sendEvent(String agentSessionId, String eventJson,
             String context) {
         String body;
         try {
@@ -93,7 +112,8 @@ public class RemoteAgentClient {
         }
 
         HttpRequest request = HttpRequest.newBuilder(
-                        this.serviceBaseUri.resolve("/v1/sessions/" + sessionId + "/events"))
+                        this.serviceBaseUri.resolve(
+                                "/v1/sessions/" + agentSessionId + "/events"))
                 .timeout(Duration.ofSeconds(60))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -114,9 +134,9 @@ public class RemoteAgentClient {
     /**
      * Requests deletion of an agent session.
      */
-    public void closeSession(String sessionId) {
+    public void closeSession(String agentSessionId) {
         HttpRequest request = HttpRequest.newBuilder(
-                        this.serviceBaseUri.resolve("/v1/sessions/" + sessionId))
+                        this.serviceBaseUri.resolve("/v1/sessions/" + agentSessionId))
                 .timeout(Duration.ofSeconds(2))
                 .DELETE()
                 .build();
@@ -126,6 +146,25 @@ public class RemoteAgentClient {
     private static void ensureSuccess(HttpResponse<String> response) throws IOException {
         if(response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new RemoteAgentHttpException(response.statusCode(), response.body());
+        }
+    }
+
+    private static String requiredString(Map<String, Object> payload, String key)
+            throws IOException {
+        Object value = payload.get(key);
+        if(value instanceof String stringValue && !stringValue.isBlank()) {
+            return stringValue;
+        }
+        throw new IOException("BeeCuriousService did not return " + key);
+    }
+
+    /**
+     * Resolved Python-side agent profile for a remote session.
+     */
+    public record RemoteAgentSession(String agentSessionId, String agentId, String version,
+                                     String agentName) {
+        public String profileId() {
+            return this.agentId + "@" + this.version;
         }
     }
 

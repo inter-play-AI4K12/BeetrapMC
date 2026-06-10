@@ -21,6 +21,10 @@ Fabric connects to `http://127.0.0.1:8765` by default. Override it in `run/.env`
 BEECURIOUS_SERVICE_URL=http://127.0.0.1:8765
 ```
 
+Fabric sends `game_session_id`, logging consent, and an optional pseudonymous participant code.
+`BeeCuriousService` creates a separate `agent_session_id`, chooses the configured agent profile,
+and returns its agent ID and version.
+
 ---
 
 ## Packages & What They Do
@@ -146,6 +150,9 @@ When `CommandHandler` creates a new `BeetrapGame(server, bottomLeft, topRight, a
 Create a `.env` in the server working directory (or set real env vars) with:
 ```dotenv
 BEECURIOUS_SERVICE_URL=http://127.0.0.1:8765
+LOKI_URL=https://loki-beetrap.interplaylab.io
+LOKI_USER=beetrap
+LOKI_PASSWORD=...
 TYPECAST_API_KEY=...
 # Optional: used by client-side speech-to-text
 OPENAI_API_KEY=...
