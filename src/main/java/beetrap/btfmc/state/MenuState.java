@@ -68,7 +68,7 @@ public class MenuState extends BeetrapState {
         this.activityNumber = NO_ACTIVITY;
         this.textInput = Beetrapfabricmc.PARTICIPANT_ID != null
                 ? Beetrapfabricmc.PARTICIPANT_ID : "";
-        this.net.beetrapLog("SESSION_ID", Beetrapfabricmc.SESSION_ID);
+        this.net.beetrapLog("session_id", Beetrapfabricmc.SESSION_ID);
 
         if (Beetrapfabricmc.CONSENT_ANSWERED) {
             // Consent + name already handled this session — go straight to activity selection
@@ -99,7 +99,7 @@ public class MenuState extends BeetrapState {
             if (option == CONSENT_YES) {
                 Beetrapfabricmc.PLAYER_DATA_CONSENT = true;
                 LOG.info("Player consented to data recording.");
-                this.net.beetrapLog("DATA_CONSENT", "yes");
+                this.net.beetrapLog("data_consent", "yes");
                 // Collect name before showing activity selection
                 this.stage = STAGE_TEXT_INPUT;
                 this.net.broadcastCustomPayload(new ShowTextInputScreenS2CPayload(
@@ -133,7 +133,7 @@ public class MenuState extends BeetrapState {
             LOG.info("Player entered participant code: {}", textInput);
             this.textInput = textInput;
             Beetrapfabricmc.PARTICIPANT_ID = textInput;
-            this.net.beetrapLog("PARTICIPANT_ID", textInput);
+            this.net.beetrapLog("participant_id", textInput);
             
             // advance to activity selection
             this.stage = STAGE_ACTIVITY;

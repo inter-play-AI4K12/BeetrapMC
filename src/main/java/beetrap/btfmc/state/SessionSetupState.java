@@ -50,10 +50,10 @@ public class SessionSetupState extends BeetrapState {
         if(questionId.equals(SESSION_SETUP_SCREEN_ID)) {
             if(option == CONSENT_YES) {
                 LOG.info("Player consented to data recording.");
-                this.net.beetrapLog("DATA_CONSENT", "yes");
+                this.net.beetrapLog("data_consent", "yes");
             } else {
                 LOG.info("Player did not consent to data recording.");
-                this.net.beetrapLog("DATA_CONSENT", "no");
+                this.net.beetrapLog("data_consent", "no");
             }
         }
     }

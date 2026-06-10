@@ -7,6 +7,7 @@ import beetrap.btfmc.agent.event.EventMessage;
 import beetrap.btfmc.agent.physical.PhysicalAgent;
 import beetrap.btfmc.agent.remote.RemoteAgentClient.RemoteAgentHttpException;
 import beetrap.btfmc.agent.remote.RemoteAgentClient.RemoteAgentSession;
+import beetrap.btfmc.handler.LokiHandler;
 import beetrap.btfmc.state.BeetrapStateManager;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -240,17 +241,26 @@ public class RemotePhysicalAgent extends PhysicalAgent {
     private void sendHeartbeat() {
         List<String> completed = this.getCompletedCommandIds();
         List<String> failed = this.getFailedCommandIds();
-        List<Map<String, Object>> events =
+        List<Map<String, Object>> gameEvents =
                 this.getBeetrapStateManager().drainAgentEvents();
+        Map<String, Object> snapshot = this.buildSnapshot(gameEvents);
+        Map<String, Object> execution = this.buildExecutionSnapshot(completed, failed);
         EventMessage heartbeat = new AgentTickEventMessage(
-                this.buildSnapshot(events),
-                this.buildExecutionSnapshot(completed, failed)
+                snapshot,
+                execution
         );
         String activeSessionId;
         synchronized(this.connectionLock) {
             activeSessionId = this.agentSessionId;
         }
         if(activeSessionId != null) {
+            if(Beetrapfabricmc.PLAYER_DATA_CONSENT) {
+                LokiHandler.pushLokiEvent(
+                        "game_state",
+                        activeSessionId,
+                        Map.of("snapshot", snapshot, "execution", execution)
+                );
+            }
             this.sendEvent(
                     activeSessionId,
                     new PendingEvent(
@@ -258,18 +268,18 @@ public class RemotePhysicalAgent extends PhysicalAgent {
                             "",
                             completed,
                             failed,
-                            events
+                            gameEvents
                     )
             );
         }
     }
 
-    private Map<String, Object> buildSnapshot(List<Map<String, Object>> events) {
+    private Map<String, Object> buildSnapshot(List<Map<String, Object>> gameEvents) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("game_tick", this.world.getTime());
         snapshot.put("current_diversity",
                 this.getBeetrapStateManager().getCurrentDiversityScore());
-        snapshot.put("events", events);
+        snapshot.put("game_events", gameEvents);
 
         ServerPlayerEntity player = this.world.getPlayers().isEmpty()
                 ? null : this.world.getPlayers().getFirst();
@@ -295,7 +305,7 @@ public class RemotePhysicalAgent extends PhysicalAgent {
                 .intersects(player.getBoundingBox());
         if(touching && !this.touchingPlayer) {
             this.getBeetrapStateManager().recordAgentEvent(
-                    "agent_bumped_player",
+                    "agent_player_collision",
                     Map.of(
                             "distance", distance,
                             "agent_position", positionList(agentPosition),

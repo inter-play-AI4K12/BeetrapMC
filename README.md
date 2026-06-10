@@ -27,12 +27,13 @@ and returns its agent ID and version.
 
 Fabric sends a lightweight `agent_tick` snapshot every second for remote profiles. It includes
 the current game tick, current diversity, player and agent positions, compact flower state,
-buffered game events, and command queue IDs. Events include agent movement, agent-player bumps,
+buffered `game_events`, and command queue IDs. Events include agent movement, agent-player collisions,
 player attacks on the agent, pollination start/end, bud rankings, and beehive movement.
 Python keeps bounded in-memory history, returns only unacknowledged commands, and uses the data
-for profile-specific behavior such as Bip 3's stationary-player check. BeeCuriousService logs
-that same unified state as `game_state`; the client no longer emits a separate `PLAYER_POS`
-event. Loki remains an asynchronous audit log rather than the real-time state source.
+for profile-specific behavior such as Bip 3's stationary-player check. Fabric logs that same
+unified state as a structured `game_state` event. All Loki event types from Fabric and Python
+use lowercase `snake_case`. Loki remains an asynchronous audit log rather than the real-time
+state source.
 
 ---
 
