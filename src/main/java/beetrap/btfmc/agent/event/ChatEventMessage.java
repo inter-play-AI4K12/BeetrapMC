@@ -1,5 +1,7 @@
 package beetrap.btfmc.agent.event;
 
+import java.util.Locale;
+
 public class ChatEventMessage extends EventMessage {
     public ChatEventMessage(String message) {
         super(EventMessage.EventTypeValue.CHAT.toString());
@@ -11,7 +13,7 @@ public class ChatEventMessage extends EventMessage {
     }
 
     public void setMessage(String message) {
-        super.put(Key.MESSAGE.toString(), message);
+        super.put(Key.MESSAGE.toString().toLowerCase(Locale.ROOT), message);
     }
 
     public enum Key {

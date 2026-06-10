@@ -18,7 +18,12 @@ import beetrap.btfmc.networking.NetworkingService;
 import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload.Operations;
 import beetrap.btfmc.state.MenuState;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -35,6 +40,7 @@ public class BeetrapStateManager {
     private static final double THREE_PI_OVER_FOUR = 3 * Math.PI / 4;
     private static final double FIVE_PI_OVER_FOUR = 5 * Math.PI / 4;
     private static final double SEVEN_PI_OVER_FOUR = 7 * Math.PI / 4;
+    private static final int MAX_PENDING_AGENT_EVENTS = 100;
     private final ServerWorld world;
     private final List<BeetrapState> oldBeetrapStates;
     private final FlowerManager flowerManager;
@@ -46,6 +52,8 @@ public class BeetrapStateManager {
     private boolean activityEnded;
     private final PlayerInteractionService interaction;
     private final BeeNestController beeNestController;
+    private final Deque<Map<String, Object>> pendingAgentEvents;
+    private String lastRankedBudsSignature;
 
     public BeetrapStateManager(ServerWorld world, FlowerManager flowerManager,
             PlayerInteractionService interaction, BeeNestController beeNestController,
@@ -69,6 +77,7 @@ public class BeetrapStateManager {
 
         this.net = new NetworkingService(this.world);
         this.beeNestController = beeNestController;
+        this.pendingAgentEvents = new ConcurrentLinkedDeque<>();
     }
 
     private void recordState() {
@@ -102,7 +111,16 @@ public class BeetrapStateManager {
         }
 
         if(this.state.hasNextState()) {
-            this.state = this.state.getNextState();
+            BeetrapState previousState = this.state;
+            this.state = previousState.getNextState();
+            if(previousState.getClass().getSimpleName().endsWith(
+                    "PollinationHappeningState")) {
+                this.recordAgentEvent("pollination_ended", Map.of(
+                        "previous_state", previousState.getClass().getSimpleName(),
+                        "next_state", this.state.getClass().getSimpleName(),
+                        "diversity", this.state.computeDiversityScore()
+                ));
+            }
             this.recordState();
             this.gardenInformationBossBar.updateBossBar(state, this.pointer);
         }
@@ -142,7 +160,16 @@ public class BeetrapStateManager {
             return;
         }
 
+        boolean wasTransitioning = this.state.hasNextState();
         this.state.onPlayerPollinate(f, e.getPos());
+        if(!wasTransitioning && this.state.hasNextState()) {
+            this.lastRankedBudsSignature = null;
+            this.recordAgentEvent("pollination_started", Map.of(
+                    "flower_id", f.getNumber(),
+                    "flower_position", positionList(e.getPos()),
+                    "diversity", this.state.computeDiversityScore()
+            ));
+        }
     }
 
     public void onPlayerTargetNewEntity(ServerPlayerEntity player, boolean exists, int id) {
@@ -368,5 +395,70 @@ public class BeetrapStateManager {
 
     public BeeNestController getBeeNestController() {
         return this.beeNestController;
+    }
+
+    public double getCurrentDiversityScore() {
+        return this.state.computeDiversityScore();
+    }
+
+    public void recordAgentEvent(String eventType, Map<String, Object> details) {
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("event_type", eventType);
+        event.put("game_tick", this.world.getTime());
+        event.put("details", details);
+        while(this.pendingAgentEvents.size() >= MAX_PENDING_AGENT_EVENTS) {
+            this.pendingAgentEvents.pollFirst();
+        }
+        this.pendingAgentEvents.addLast(event);
+    }
+
+    public List<Map<String, Object>> drainAgentEvents() {
+        List<Map<String, Object>> events = new ArrayList<>();
+        Map<String, Object> event;
+        while((event = this.pendingAgentEvents.pollFirst()) != null) {
+            events.add(event);
+        }
+        return events;
+    }
+
+    public void requeueAgentEvents(List<Map<String, Object>> events) {
+        for(int index = events.size() - 1; index >= 0; index--) {
+            this.pendingAgentEvents.addFirst(events.get(index));
+        }
+        while(this.pendingAgentEvents.size() > MAX_PENDING_AGENT_EVENTS) {
+            this.pendingAgentEvents.pollLast();
+        }
+    }
+
+    public void recordBudsRanked(Flower[] rankedFlowers, boolean diversifying,
+            Vec3d center, double radius) {
+        List<Integer> flowerIds = Arrays.stream(rankedFlowers)
+                .filter(flower -> flower != null)
+                .map(Flower::getNumber)
+                .toList();
+        String rankingMethod = diversifying ? "most_distant" : "least_distant";
+        String signature = rankingMethod + ":" + radius + ":" + flowerIds;
+        if(signature.equals(this.lastRankedBudsSignature)) {
+            return;
+        }
+        this.lastRankedBudsSignature = signature;
+
+        List<Map<String, Object>> rankings = new ArrayList<>();
+        for(int index = 0; index < flowerIds.size(); index++) {
+            rankings.add(Map.of(
+                    "rank", index + 1,
+                    "flower_id", flowerIds.get(index)
+            ));
+        }
+        this.recordAgentEvent("buds_ranked", Map.of(
+                "ranking_method", rankingMethod,
+                "pollination_center", positionList(center),
+                "pollination_radius", radius,
+                "rankings", rankings
+        ));
+    }
+
+    public static List<Double> positionList(Vec3d position) {
+        return List.of(position.x, position.y, position.z);
     }
 }

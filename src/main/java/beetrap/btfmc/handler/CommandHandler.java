@@ -1,13 +1,8 @@
 package beetrap.btfmc.handler;
 
-import beetrap.btfmc.openai.OpenAiUtil;
-import beetrap.btfmc.tts.CrappyTextToSpeechUtil;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import com.openai.models.responses.Response;
-import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.MinecraftServer;
@@ -16,7 +11,6 @@ import net.minecraft.server.command.CommandManager.RegistrationEnvironment;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
 import net.minecraft.world.GameMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,42 +64,6 @@ public final class CommandHandler {
                 )
         );
 
-        dispatcher.register(
-                CommandManager.literal("openai")
-                        .then(CommandManager.literal("clear")
-                                .executes(CommandHandler::openaiClearCommand)
-                        )
-                        .then(CommandManager.literal("say")
-                                .then(CommandManager.argument("message",
-                                                StringArgumentType.greedyString())
-                                        .executes(CommandHandler::openaiSayCommand)
-                                )
-                        )
-        );
-    }
-
-    private static int openaiClearCommand(CommandContext<ServerCommandSource> ctx) {
-        OpenAiUtil.clearHistory();
-        ctx.getSource().sendFeedback(() -> Text.of("History cleared."), false);
-        return 0;
-    }
-
-    private static int openaiSayCommand(CommandContext<ServerCommandSource> ctx) {
-        String msg = StringArgumentType.getString(ctx, "message");
-        CompletableFuture<Response> response = OpenAiUtil.getGpt4oLatestResponseAsync(msg);
-
-        response.whenComplete((response1, throwable) -> {
-            String s = response1.output().getFirst().asMessage().content().getFirst().asOutputText()
-                    .text();
-            CrappyTextToSpeechUtil.say(s);
-            Text t = Text.of(s);
-            for(ServerPlayerEntity player : ctx.getSource().getServer().getOverworld()
-                    .getPlayers()) {
-                player.sendMessage(t);
-            }
-        });
-
-        return 0;
     }
 
     public static void registerCommands() {

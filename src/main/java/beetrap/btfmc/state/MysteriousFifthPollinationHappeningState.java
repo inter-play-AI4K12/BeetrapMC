@@ -81,6 +81,12 @@ public class MysteriousFifthPollinationHappeningState extends BeetrapState {
             this.newFlowers[r] = f;
             ++r;
         }
+        this.stateManager.recordBudsRanked(
+                this.newFlowers,
+                this.usingDiversifyingRankingMethod,
+                this.pollinationCenter,
+                this.pollinationCircleRadius
+        );
     }
 
     private void onTick20() {

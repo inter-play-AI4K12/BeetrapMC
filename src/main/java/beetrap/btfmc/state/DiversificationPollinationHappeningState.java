@@ -116,6 +116,12 @@ public class DiversificationPollinationHappeningState extends BeetrapState {
             this.newFlowers[r] = f;
             ++r;
         }
+        this.stateManager.recordBudsRanked(
+                this.newFlowers,
+                this.usingDiversifyingRankingMethod,
+                this.pollinationCenter,
+                this.pollinationCircleRadius
+        );
     }
 
     private void tickPlaceNewFlowers() {

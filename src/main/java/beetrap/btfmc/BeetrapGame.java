@@ -5,17 +5,22 @@ import static beetrap.btfmc.agent.Agent.AGENT_LEVEL_PHYSICAL;
 import beetrap.btfmc.agent.Agent;
 import beetrap.btfmc.agent.empty.EmptyAgent;
 import beetrap.btfmc.agent.physical.PhysicalAgent;
+import beetrap.btfmc.agent.remote.RemotePhysicalAgent;
 import beetrap.btfmc.flower.FlowerManager;
 import beetrap.btfmc.flower.FlowerValueScoreboardDisplayerService;
 import beetrap.btfmc.networking.NetworkingService;
 import beetrap.btfmc.state.BeetrapStateManager;
+import java.util.Locale;
+import java.util.Map;
 import net.minecraft.block.Blocks;
+import net.minecraft.entity.Entity;
 import net.minecraft.network.message.MessageType.Parameters;
 import net.minecraft.network.message.SignedMessage;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Vector3i;
 
@@ -76,7 +81,7 @@ public class BeetrapGame {
     public void newAgent() {
         switch(this.aiLevel) {
             case AGENT_LEVEL_PHYSICAL -> {
-                this.agent = new PhysicalAgent(this.world, this.stateManager);
+                this.agent = new RemotePhysicalAgent(this.world, this.stateManager);
             }
 
             default -> {
@@ -110,6 +115,18 @@ public class BeetrapGame {
 
     public void onPlayerPollinate(ServerPlayerEntity player, boolean exists, int id) {
         this.stateManager.onPlayerPollinate(this.flowerManager, exists, id);
+    }
+
+    public void onPlayerAttackEntity(ServerPlayerEntity player, Hand hand, Entity entity) {
+        if(!(this.agent instanceof PhysicalAgent physicalAgent)
+                || physicalAgent.getBeeEntity() != entity) {
+            return;
+        }
+        this.stateManager.recordAgentEvent("player_kicked_agent", Map.of(
+                "hand", hand.name().toLowerCase(Locale.ROOT),
+                "player_position", BeetrapStateManager.positionList(player.getPos()),
+                "agent_position", BeetrapStateManager.positionList(entity.getPos())
+        ));
     }
 
     public void onPlayerRequestTimeTravel(ServerPlayerEntity player, int n, int operation) {

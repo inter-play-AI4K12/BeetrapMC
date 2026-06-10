@@ -3,13 +3,10 @@ package beetrap.btfmc;
 import beetrap.btfmc.handler.BeetrapGameHandler;
 import beetrap.btfmc.handler.CommandHandler;
 import beetrap.btfmc.handler.EntityHandler;
-import beetrap.btfmc.handler.LokiHandler;
 import beetrap.btfmc.handler.NetworkHandler;
-import beetrap.btfmc.openai.OpenAiUtil;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
@@ -23,51 +20,44 @@ public class Beetrapfabricmc implements ModInitializer {
 
     public static boolean PLAYER_DATA_CONSENT = false;
     public static boolean CONSENT_ANSWERED = false;
-    public static String USERNAME = null;
-    public static String SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
-    public static String TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
-    public static String SESSION_ID = SESSION_CODE + "_" + TIMESTAMP;
+    public static String PARTICIPANT_ID = null;
+    public static String SESSION_CODE;
+    public static String TIMESTAMP;
+    public static String SESSION_ID;
     public static final Logger LOG = LogManager.getLogger(Beetrapfabricmc.class);
     public static final String MOD_ID = "beetrap-fabricmc";
     public static final String MOD_REQUIRED_OPENAI_API_KEY = "OPENAI_API_KEY";
-    public static final String MOD_REQUIRED_OPENAI_BASE_URL = "OPENAI_BASE_URL";
-    public static final String MOD_REQUIRED_OPENAI_ORG_ID = "OPENAI_ORG_ID";
-    public static final String MOD_REQUIRED_OPENAI_PROJECT_ID = "OPENAI_PROJECT_ID";
     public static final String MOD_REQUIRED_TYPECAST_API_KEY = "TYPECAST_API_KEY";
+    public static final String BEECURIOUS_SERVICE_URL = "BEECURIOUS_SERVICE_URL";
 
     public static String id(String name) {
         return MOD_ID + ":" + name;
     }
 
+    public static void beginGameSession() {
+        SESSION_CODE = UUID.randomUUID().toString().substring(0, 8);
+        TIMESTAMP = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
+        SESSION_ID = SESSION_CODE + "_" + TIMESTAMP;
+    }
+
     private void loadEnv() {
         Map<String, String> env = System.getenv();
         Map<Object, Object> properties = System.getProperties();
-        properties.putAll(env);
-
-        boolean b = true;
-
-        b = b && properties.containsKey(MOD_REQUIRED_OPENAI_API_KEY);
-        b = b && properties.containsKey(MOD_REQUIRED_OPENAI_BASE_URL);
-        b = b && properties.containsKey(MOD_REQUIRED_OPENAI_ORG_ID);
-        b = b && properties.containsKey(MOD_REQUIRED_OPENAI_PROJECT_ID);
-        b = b && properties.containsKey(MOD_REQUIRED_TYPECAST_API_KEY);
-
-        if(b) {
-            LOG.info("All required environment variables found, good to go.");
-            return;
-        }
 
         File f = new File(".env");
-        LOG.warn("Not all required environment variables found, attempting to load from {}",
-                f.getAbsolutePath());
-        Properties p = new Properties();
-        try {
-            p.load(new FileReader(f));
-        } catch(IOException e) {
-            throw new UncheckedIOException(e);
+        if(f.isFile()) {
+            Properties p = new Properties();
+            try {
+                p.load(new FileReader(f));
+                properties.putAll(p);
+            } catch(IOException e) {
+                LOG.error("Could not load environment file {}", f.getAbsolutePath(), e);
+            }
         }
 
-        properties.putAll(p);
+        properties.putAll(env);
+        LOG.info("BeeCuriousService URL: {}",
+                properties.getOrDefault(BEECURIOUS_SERVICE_URL, "http://127.0.0.1:8765"));
     }
 
 
@@ -75,8 +65,7 @@ public class Beetrapfabricmc implements ModInitializer {
     @Override
     public void onInitialize() {
         this.loadEnv();
-        // LokiHandler.pushLokiLog("beetrap server initialized");
-        OpenAiUtil.load();
+        beginGameSession();
         BeetrapGameHandler.registerEvents();
         CommandHandler.registerCommands();
         NetworkHandler.registerCustomPayloads();
