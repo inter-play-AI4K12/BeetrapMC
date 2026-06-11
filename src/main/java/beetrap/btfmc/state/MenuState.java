@@ -48,6 +48,7 @@ public class MenuState extends BeetrapState {
     private static final int RECOMMENDATION_SYSTEM = 2;
     private static final int DIVERSIFICATION = 3;
     private static final int MYSTERIOUS_FIFTH_ACTIVITY = 4;
+    private static final int MEET_BIP_1 = 5;
 
     private int stage;
     private int activityNumber;
@@ -80,7 +81,8 @@ public class MenuState extends BeetrapState {
                     "What is the filter bubble effect?",
                     "How does the garden recommend flowers?",
                     "How do we break the filter bubble?",
-                    "Mysterious Fifth Activity"));
+                    "Mysterious Fifth Activity",
+                    "Meet Bip 1"));
         } else {
             // First time — start with consent screen
             this.stage = STAGE_CONSENT;
@@ -144,7 +146,8 @@ public class MenuState extends BeetrapState {
                     "What is the filter bubble effect?",
                     "How does the garden recommend flowers?",
                     "How do we break the filter bubble?",
-                    "Mysterious Fifth Activity"));
+                    "Mysterious Fifth Activity",
+                    "Meet Bip 1"));
         }
     }
 
@@ -188,6 +191,11 @@ public class MenuState extends BeetrapState {
                 this.net.beetrapLog(BEETRAP_LOG_ID_ACTIVITY_BEGIN_4,
                         "The user have chosen to explore mysterious fifth activity!");
                 yield new MysteriousFifthPollinationReadyState(this, 0);
+            }
+            case MEET_BIP_1 -> {
+                this.net.beetrapLog("activity_begin_meetbip1",
+                        "The user has chosen Meet Bip 1!");
+                yield new MeetBip1PollinationReadyState(this, 0);
             }
             default -> null;
         };
