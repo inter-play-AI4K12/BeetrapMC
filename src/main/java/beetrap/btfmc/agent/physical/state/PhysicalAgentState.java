@@ -13,6 +13,8 @@ import beetrap.btfmc.state.BeetrapStateManager;
 import beetrap.btfmc.tts.SlopTextToSpeechUtil;
 import beetrap.btfmc.util.TextUtil;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import net.minecraft.command.argument.EntityAnchorArgumentType.EntityAnchor;
 import net.minecraft.entity.passive.BeeEntity;
@@ -109,31 +111,47 @@ public class PhysicalAgentState extends AgentState {
     
     private void startProportionalDialogue(String dialogue) {
         this.fullDialogue = dialogue;
-        
+
         // Get TTS with duration information
         SlopTextToSpeechUtil.sayWithDuration(dialogue).thenAccept(ttsResult -> {
-            this.audioDurationSeconds = ttsResult.durationSeconds;
-            
-            // Break dialogue into display chunks
-            this.textChunks = TextUtil.wrapText(dialogue, DISPLAY_CHUNK_LENGTH);
-            this.currentChunkIndex = 0;
-            this.textDisplayStartTick = this.world.getTime();
-            this.isTextDisplayActive = true;
-            
-            // Start showing first chunk immediately
-            if (!this.textChunks.isEmpty()) {
-                this.beeEntity.setCustomName(Text.of(this.textChunks.get(0)));
-                this.beeEntity.setCustomNameVisible(true);
-            }
-            
+            this.beginTextDisplay(dialogue, ttsResult.durationSeconds);
+
             // Handle completion when audio finishes
-            ttsResult.playbackFuture.thenRun(() -> {
-                this.beeEntity.setCustomName(null);
-                this.beeEntity.setCustomNameVisible(false);
-                this.isTextDisplayActive = false;
-                this.completeCommand();
-            });
+            ttsResult.playbackFuture.whenComplete((unused, throwable) ->
+                    this.finishTextDisplay());
+        }).exceptionally(throwable -> {
+            // TTS failed (e.g. missing/invalid Typecast key or unreachable endpoint).
+            // Show the text anyway and keep the command queue moving so Bip never freezes.
+            double fallbackSeconds = Math.max(2.0, dialogue.length() / 15.0);
+            this.beginTextDisplay(dialogue, fallbackSeconds);
+            CompletableFuture
+                    .delayedExecutor((long)(fallbackSeconds * 1000), TimeUnit.MILLISECONDS)
+                    .execute(this::finishTextDisplay);
+            return null;
         });
+    }
+
+    private void beginTextDisplay(String dialogue, double durationSeconds) {
+        this.audioDurationSeconds = durationSeconds;
+
+        // Break dialogue into display chunks
+        this.textChunks = TextUtil.wrapText(dialogue, DISPLAY_CHUNK_LENGTH);
+        this.currentChunkIndex = 0;
+        this.textDisplayStartTick = this.world.getTime();
+        this.isTextDisplayActive = true;
+
+        // Start showing first chunk immediately
+        if (!this.textChunks.isEmpty()) {
+            this.beeEntity.setCustomName(Text.of(this.textChunks.get(0)));
+            this.beeEntity.setCustomNameVisible(true);
+        }
+    }
+
+    private void finishTextDisplay() {
+        this.beeEntity.setCustomName(null);
+        this.beeEntity.setCustomNameVisible(false);
+        this.isTextDisplayActive = false;
+        this.completeCommand();
     }
 
     private void updateTextDisplay() {

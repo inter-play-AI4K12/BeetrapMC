@@ -193,6 +193,7 @@ public class MenuState extends BeetrapState {
                 yield new MysteriousFifthPollinationReadyState(this, 0);
             }
             case MEET_BIP_1 -> {
+                BeetrapGameHandler.getGame().newAgent();
                 this.net.beetrapLog("activity_begin_meetbip1",
                         "The user has chosen Meet Bip 1!");
                 yield new MeetBip1PollinationReadyState(this, 0);

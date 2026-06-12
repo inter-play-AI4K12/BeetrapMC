@@ -14,6 +14,10 @@ import java.util.Locale;
 import java.util.Map;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.FallingBlockEntity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.passive.BeeEntity;
+import net.minecraft.util.TypeFilter;
 import net.minecraft.network.message.MessageType.Parameters;
 import net.minecraft.network.message.SignedMessage;
 import net.minecraft.server.MinecraftServer;
@@ -59,6 +63,10 @@ public class BeetrapGame {
         this.bottomLeft = bottomLeft;
         this.topRight = topRight;
         this.world = this.server.getOverworld();
+        // Remove any stray nest/flower/bee entities left over in the saved world
+        // from a previous session that exited without cleanup, so we never end up
+        // with duplicate hives or gardens stacked on top of each other.
+        purgeStrayGameEntities(this.world);
         this.net = new NetworkingService(this.world);
         this.flowerManager = new FlowerManager(this.world, FLOWER_POOL_FLOWER_COUNT, bottomLeft,
                 topRight);
@@ -76,6 +84,27 @@ public class BeetrapGame {
         this.amountOfFlowersToWither = AMOUNT_OF_FLOWERS_TO_WITHER_DEFAULT_MODE;
         this.aiLevel = aiLevel;
         this.agent = new EmptyAgent(this.world, this.stateManager);
+    }
+
+    /**
+     * Kills every entity type the game spawns (bee nest, flowers, and Bip) that may
+     * have been persisted into the saved world by a previous session. The garden is
+     * the only thing in this world, so clearing these types is always safe and
+     * prevents duplicate hives/gardens from accumulating across launches.
+     */
+    private static void purgeStrayGameEntities(ServerWorld world) {
+        for(FallingBlockEntity fbe : world.getEntitiesByType(
+                TypeFilter.instanceOf(FallingBlockEntity.class), e -> true)) {
+            fbe.discard();
+        }
+        for(BeeEntity bee : world.getEntitiesByType(
+                TypeFilter.instanceOf(BeeEntity.class), e -> true)) {
+            bee.discard();
+        }
+        for(ItemEntity item : world.getEntitiesByType(
+                TypeFilter.instanceOf(ItemEntity.class), e -> true)) {
+            item.discard();
+        }
     }
 
     public void newAgent() {
@@ -122,6 +151,9 @@ public class BeetrapGame {
                 || physicalAgent.getBeeEntity() != entity) {
             return;
         }
+        // Instant, mod-side reaction (yell + shove). Bypasses the LLM for zero latency.
+        physicalAgent.reactToKick(player);
+        // Still record for telemetry/Loki, but this no longer drives the reaction.
         this.stateManager.recordAgentEvent("player_kicked_agent", Map.of(
                 "hand", hand.name().toLowerCase(Locale.ROOT),
                 "player_position", BeetrapStateManager.positionList(player.getPos()),
