@@ -13,6 +13,7 @@ import beetrap.btfmc.state.BeetrapStateManager;
 import beetrap.btfmc.tts.SlopTextToSpeechUtil;
 import beetrap.btfmc.util.TextUtil;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
@@ -26,6 +27,12 @@ import net.minecraft.util.math.Vec3d;
 
 public class PhysicalAgentState extends AgentState {
     private static final double EPSILON = 0.25;
+    private static final Random IDLE_RANDOM = new Random();
+    private static final int IDLE_WANDER_INTERVAL_TICKS = 160;  // new wander target every ~8 s
+    private static final double IDLE_WANDER_RADIUS = 2.5;
+    private static final double IDLE_BOB_AMPLITUDE = 0.35;      // blocks
+    private static final double IDLE_BOB_SPEED = 0.08;          // radians per tick (~3 s cycle)
+
     protected PhysicalAgent physicalAgent;
     protected BeeEntity beeEntity;
     protected ServerWorld world;
@@ -48,6 +55,11 @@ public class PhysicalAgentState extends AgentState {
     
     // Display chunk size for readability
     protected static final int DISPLAY_CHUNK_LENGTH = 25;
+
+    // Idle hover / wander state (not carried across state transitions by design)
+    private long idleTick = 0;
+    private double idleBaseY = 0;
+    private Vec3d idleWanderTarget = null;
 
     public PhysicalAgentState() {
         super();
@@ -310,8 +322,10 @@ public class PhysicalAgentState extends AgentState {
         this.updateTextDisplay();
 
         if(!this.agent.hasNextCommand()) {
-            this.beeEntity.lookAt(EntityAnchor.EYES, this.world.getPlayers().getFirst().getPos());
+            this.tickIdle();
         } else {
+            this.idleTick = 0;
+            this.idleWanderTarget = null;
             synchronized(this.currentCommandLock) {
                 if(this.currentCommand == null) {
                     this.currentCommand = this.agent.getNextCommand();
@@ -328,6 +342,31 @@ public class PhysicalAgentState extends AgentState {
                 this.hasNextState = true;
                 this.nextState = new PAS1EndGame(this);
             }
+        }
+    }
+
+    private void tickIdle() {
+        if(this.idleTick == 0) {
+            this.idleBaseY = this.beeEntity.getY();
+        }
+        this.idleTick++;
+
+        // Pick a new wander target on first idle tick and every IDLE_WANDER_INTERVAL_TICKS
+        if(this.idleWanderTarget == null || this.idleTick % IDLE_WANDER_INTERVAL_TICKS == 1) {
+            Vec3d cur = this.beeEntity.getPos();
+            double dx = (IDLE_RANDOM.nextDouble() - 0.5) * 2 * IDLE_WANDER_RADIUS;
+            double dz = (IDLE_RANDOM.nextDouble() - 0.5) * 2 * IDLE_WANDER_RADIUS;
+            this.idleWanderTarget = new Vec3d(cur.x + dx, this.idleBaseY, cur.z + dz);
+        }
+
+        // Gentle sinusoidal bob around base Y while drifting to the wander target
+        double bobY = this.idleBaseY + Math.sin(this.idleTick * IDLE_BOB_SPEED) * IDLE_BOB_AMPLITUDE;
+        this.beeEntity.getMoveControl().moveTo(
+                this.idleWanderTarget.x, bobY, this.idleWanderTarget.z, 0.4);
+
+        // Keep facing the player while wandering
+        if(!this.world.getPlayers().isEmpty()) {
+            this.beeEntity.lookAt(EntityAnchor.EYES, this.world.getPlayers().getFirst().getPos());
         }
     }
 

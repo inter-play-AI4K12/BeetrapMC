@@ -8,6 +8,7 @@ import java.util.Random;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.passive.BeeEntity;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
@@ -69,6 +70,11 @@ public class PhysicalAgent extends Agent {
             p.sendMessage(Text.of("<" + this.name + "> " + yell));
         }
         SlopTextToSpeechUtil.say(yell);
+
+        // Angry-villager puffs at Bip's position so the punch has visual feedback.
+        Vec3d beePos = this.beeEntity.getPos();
+        this.world.spawnParticles(ParticleTypes.ANGRY_VILLAGER,
+                beePos.x, beePos.y + 0.5, beePos.z, 6, 0.4, 0.3, 0.4, 0.0);
 
         // Shove Bip away from the player so the punch feels physical.
         Vec3d away = this.beeEntity.getPos().subtract(player.getPos());

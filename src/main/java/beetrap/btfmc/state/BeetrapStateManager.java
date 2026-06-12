@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import net.minecraft.entity.Entity;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
@@ -54,6 +55,7 @@ public class BeetrapStateManager {
     private final BeeNestController beeNestController;
     private final Deque<Map<String, Object>> pendingAgentEvents;
     private String lastRankedBudsSignature;
+    private double lastDiversityScore;
 
     public BeetrapStateManager(ServerWorld world, FlowerManager flowerManager,
             PlayerInteractionService interaction, BeeNestController beeNestController,
@@ -73,6 +75,7 @@ public class BeetrapStateManager {
         this.oldBeetrapStates = new ArrayList<>();
         flowerManager.placeFlowerEntities(this.state);
         this.initialDiversityScore = this.state.computeDiversityScore();
+        this.lastDiversityScore = this.initialDiversityScore;
         this.recordState();
 
         this.net = new NetworkingService(this.world);
@@ -115,11 +118,19 @@ public class BeetrapStateManager {
             this.state = previousState.getNextState();
             if(previousState.getClass().getSimpleName().endsWith(
                     "PollinationHappeningState")) {
+                double newDiversity = this.state.computeDiversityScore();
                 this.recordAgentEvent("pollination_ended", Map.of(
                         "previous_state", previousState.getClass().getSimpleName(),
                         "next_state", this.state.getClass().getSimpleName(),
-                        "diversity", this.state.computeDiversityScore()
+                        "diversity", newDiversity
                 ));
+                // Smoke near the nest when diversity has dropped to signal the filter-bubble effect
+                if(newDiversity < this.lastDiversityScore - 0.05) {
+                    Vec3d nestPos = this.beeNestController.getBeeNestPosition();
+                    this.world.spawnParticles(ParticleTypes.SMOKE,
+                            nestPos.x, nestPos.y + 0.8, nestPos.z, 12, 0.6, 0.4, 0.6, 0.02);
+                }
+                this.lastDiversityScore = newDiversity;
             }
             this.recordState();
             this.gardenInformationBossBar.updateBossBar(state, this.pointer);
@@ -163,6 +174,11 @@ public class BeetrapStateManager {
         boolean wasTransitioning = this.state.hasNextState();
         this.state.onPlayerPollinate(f, e.getPos());
         if(!wasTransitioning && this.state.hasNextState()) {
+            // Burst of hearts at the flower to celebrate the successful pollination
+            Vec3d fp = e.getPos();
+            this.world.spawnParticles(ParticleTypes.HEART,
+                    fp.x, fp.y + 0.6, fp.z, 8, 0.4, 0.3, 0.4, 0.0);
+
             this.lastRankedBudsSignature = null;
             this.recordAgentEvent("pollination_started", Map.of(
                     "flower_id", f.getNumber(),
