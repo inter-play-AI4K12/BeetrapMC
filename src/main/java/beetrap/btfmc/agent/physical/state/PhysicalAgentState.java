@@ -27,10 +27,8 @@ import net.minecraft.util.math.Vec3d;
 public class PhysicalAgentState extends AgentState {
     private static final double EPSILON = 0.25;
     private static final Random IDLE_RANDOM = new Random();
-    private static final int IDLE_WANDER_INTERVAL_TICKS = 160;  // new wander target every ~8 s
-    private static final double IDLE_WANDER_RADIUS = 1.5;       // blocks from player — stays close
-    private static final double IDLE_BOB_AMPLITUDE = 0.25;      // blocks
-    private static final double IDLE_BOB_SPEED = 0.07;          // radians per tick (~4 s cycle)
+    private static final int IDLE_WANDER_INTERVAL_TICKS = 160;  // pick new target every ~8 s
+    private static final double IDLE_WANDER_RADIUS = 8;         // blocks from player
 
     protected PhysicalAgent physicalAgent;
     protected BeeEntity beeEntity;
@@ -320,7 +318,9 @@ public class PhysicalAgentState extends AgentState {
         this.updateTextDisplay();
 
         if(!this.agent.hasNextCommand()) {
-            this.tickIdle();
+            if(beetrap.btfmc.BipFeatures.IDLE_WANDER) {
+                this.tickIdle();
+            }
         } else {
             this.idleTick = 0;
             this.idleWanderTarget = null;
@@ -351,21 +351,17 @@ public class PhysicalAgentState extends AgentState {
         }
         Vec3d playerPos = this.world.getPlayers().getFirst().getPos();
 
-        // Anchor wander targets to the player so Bip never drifts away.
-        // Pick a new target on first idle tick and every IDLE_WANDER_INTERVAL_TICKS.
+        // Pick a new wander target anchored to the player every IDLE_WANDER_INTERVAL_TICKS.
+        // MoveControl is called ONLY here — calling it every tick with a slightly-different Y
+        // forces a heading recalculation each tick and causes visible left-right twitching.
         if(this.idleWanderTarget == null || this.idleTick % IDLE_WANDER_INTERVAL_TICKS == 1) {
             double dx = (IDLE_RANDOM.nextDouble() - 0.5) * 2 * IDLE_WANDER_RADIUS;
             double dz = (IDLE_RANDOM.nextDouble() - 0.5) * 2 * IDLE_WANDER_RADIUS;
-            // Hover just above the player's head regardless of where Bip was before
             this.idleWanderTarget = new Vec3d(
                     playerPos.x + dx, playerPos.y + 1.5, playerPos.z + dz);
+            this.beeEntity.getMoveControl().moveTo(
+                    this.idleWanderTarget.x, this.idleWanderTarget.y, this.idleWanderTarget.z, 0.4);
         }
-
-        // Gentle sinusoidal bob while slowly drifting to the wander target.
-        // MoveControl handles turning naturally — no manual lookAt() here to avoid twitching.
-        double bobY = (playerPos.y + 1.5) + Math.sin(this.idleTick * IDLE_BOB_SPEED) * IDLE_BOB_AMPLITUDE;
-        this.beeEntity.getMoveControl().moveTo(
-                this.idleWanderTarget.x, bobY, this.idleWanderTarget.z, 0.25);
     }
 
     public void updateStateInstruction(InstructionBuilder ib) {

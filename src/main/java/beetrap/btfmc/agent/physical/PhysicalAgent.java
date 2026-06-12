@@ -1,6 +1,7 @@
 package beetrap.btfmc.agent.physical;
 
 import beetrap.btfmc.agent.Agent;
+import beetrap.btfmc.BipFeatures;
 import beetrap.btfmc.agent.physical.state.PAS0Introduction;
 import beetrap.btfmc.state.BeetrapStateManager;
 import beetrap.btfmc.tts.SlopTextToSpeechUtil;
@@ -57,6 +58,9 @@ public class PhysicalAgent extends Agent {
      * bypasses the LLM so the response feels instant.
      */
     public void reactToKick(ServerPlayerEntity player) {
+        if(!BipFeatures.KICK_REACTION) {
+            return;
+        }
         long now = System.currentTimeMillis();
         if(now - this.lastKickReactionMs < KICK_REACTION_COOLDOWN_MS) {
             return;

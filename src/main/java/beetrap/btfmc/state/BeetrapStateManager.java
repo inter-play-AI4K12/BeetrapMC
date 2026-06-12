@@ -8,6 +8,7 @@ import static beetrap.btfmc.networking.BeetrapLogS2CPayload.BEETRAP_LOG_ID_TIME_
 import static beetrap.btfmc.networking.BeetrapLogS2CPayload.BEETRAP_LOG_ID_TIME_MACHINE_FORWARD;
 
 import beetrap.btfmc.BeeNestController;
+import beetrap.btfmc.BipFeatures;
 import beetrap.btfmc.GardenInformationBossBar;
 import beetrap.btfmc.PlayerInteractionService;
 import beetrap.btfmc.flower.Flower;
@@ -124,8 +125,7 @@ public class BeetrapStateManager {
                         "next_state", this.state.getClass().getSimpleName(),
                         "diversity", newDiversity
                 ));
-                // Smoke near the nest when diversity has dropped to signal the filter-bubble effect
-                if(newDiversity < this.lastDiversityScore - 0.05) {
+                if(BipFeatures.EMOTION_PARTICLES && newDiversity < this.lastDiversityScore - 0.05) {
                     Vec3d nestPos = this.beeNestController.getBeeNestPosition();
                     this.world.spawnParticles(ParticleTypes.SMOKE,
                             nestPos.x, nestPos.y + 0.8, nestPos.z, 12, 0.6, 0.4, 0.6, 0.02);
@@ -174,10 +174,11 @@ public class BeetrapStateManager {
         boolean wasTransitioning = this.state.hasNextState();
         this.state.onPlayerPollinate(f, e.getPos());
         if(!wasTransitioning && this.state.hasNextState()) {
-            // Burst of hearts at the flower to celebrate the successful pollination
-            Vec3d fp = e.getPos();
-            this.world.spawnParticles(ParticleTypes.HEART,
-                    fp.x, fp.y + 0.6, fp.z, 8, 0.4, 0.3, 0.4, 0.0);
+            if(BipFeatures.EMOTION_PARTICLES) {
+                Vec3d fp = e.getPos();
+                this.world.spawnParticles(ParticleTypes.HEART,
+                        fp.x, fp.y + 0.6, fp.z, 8, 0.4, 0.3, 0.4, 0.0);
+            }
 
             this.lastRankedBudsSignature = null;
             this.recordAgentEvent("pollination_started", Map.of(
