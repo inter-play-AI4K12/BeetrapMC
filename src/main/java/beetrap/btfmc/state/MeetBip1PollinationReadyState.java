@@ -38,7 +38,7 @@ public class MeetBip1PollinationReadyState extends PollinationReadyState {
         }
 
         this.stateManager.recordAgentEvent("activity_narration", Map.of(
-                "text", "Hi! Welcome to the magic garden. Pollinate flowers you like!"));
+                "text", "This is the magic garden. Pollinate the flowers you like!"));
     }
 
     @Override
