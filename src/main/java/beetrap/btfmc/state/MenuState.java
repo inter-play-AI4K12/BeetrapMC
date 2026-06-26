@@ -49,6 +49,8 @@ public class MenuState extends BeetrapState {
     private static final int DIVERSIFICATION = 3;
     private static final int MYSTERIOUS_FIFTH_ACTIVITY = 4;
     private static final int MEET_BIP_1 = 5;
+    private static final int FILTER_BUBBLE_BIP_SCRIPTED = 6;
+    private static final int FILTER_BUBBLE_BIP_LLM = 7;
 
     private int stage;
     private int activityNumber;
@@ -82,7 +84,9 @@ public class MenuState extends BeetrapState {
                     "How does the garden recommend flowers?",
                     "How do we break the filter bubble?",
                     "Mysterious Fifth Activity",
-                    "Meet Bip 1"));
+                    "Meet Bip 1",
+                    "Filter Bubble + Bip (scripted)",
+                    "Filter Bubble + Bip (LLM)"));
         } else {
             // First time — start with consent screen
             this.stage = STAGE_CONSENT;
@@ -118,7 +122,10 @@ public class MenuState extends BeetrapState {
                         "What is the filter bubble effect?",
                         "How does the garden recommend flowers?",
                         "How do we break the filter bubble?",
-                        "Mysterious Fifth Activity"));
+                        "Mysterious Fifth Activity",
+                        "Meet Bip 1",
+                        "Filter Bubble + Bip (scripted)",
+                        "Filter Bubble + Bip (LLM)"));
             }
             return;
         }
@@ -147,7 +154,9 @@ public class MenuState extends BeetrapState {
                     "How does the garden recommend flowers?",
                     "How do we break the filter bubble?",
                     "Mysterious Fifth Activity",
-                    "Meet Bip 1"));
+                    "Meet Bip 1",
+                    "Filter Bubble + Bip (scripted)",
+                    "Filter Bubble + Bip (LLM)"));
         }
     }
 
@@ -197,6 +206,18 @@ public class MenuState extends BeetrapState {
                 this.net.beetrapLog("activity_begin_meetbip1",
                         "The user has chosen Meet Bip 1!");
                 yield new MeetBip1PollinationReadyState(this, 0);
+            }
+            case FILTER_BUBBLE_BIP_SCRIPTED -> {
+                BeetrapGameHandler.getGame().newAgent();
+                this.net.beetrapLog("activity_begin_filter_bubble_bip_scripted",
+                        "The user has chosen Filter Bubble + Bip (scripted)!");
+                yield new FilterBubbleBipScriptedPollinationReadyState(this, 0);
+            }
+            case FILTER_BUBBLE_BIP_LLM -> {
+                BeetrapGameHandler.getGame().newAgent();
+                this.net.beetrapLog("activity_begin_filter_bubble_bip_llm",
+                        "The user has chosen Filter Bubble + Bip (LLM)!");
+                yield new FilterBubbleBipLLMPollinationReadyState(this, 0);
             }
             default -> null;
         };

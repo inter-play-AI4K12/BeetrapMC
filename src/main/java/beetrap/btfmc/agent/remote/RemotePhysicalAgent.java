@@ -80,7 +80,12 @@ public class RemotePhysicalAgent extends PhysicalAgent {
         }
 
         this.heartbeatTicks++;
-        if(this.heartbeatTicks >= HEARTBEAT_INTERVAL_TICKS) {
+        // Fire immediately when reactive events (narration/context, kicks, …) are waiting and
+        // the LLM channel is free, instead of waiting out the full heartbeat interval. This cuts
+        // response latency and stops events queued across several ticks from batching into one
+        // call (which would make Bip say several lines back-to-back).
+        boolean eventsPending = this.getBeetrapStateManager().hasPendingAgentEvents();
+        if(this.heartbeatTicks >= HEARTBEAT_INTERVAL_TICKS || eventsPending) {
             this.heartbeatTicks = 0;
             this.sendHeartbeat();
         }

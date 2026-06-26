@@ -29,7 +29,10 @@ public final class SlopTextToSpeechUtil {
             MOD_REQUIRED_TYPECAST_API_KEY);
     private static final CloseableHttpClient httpClient;
     private static final String requestBody;
-    private static final ExecutorService es;
+    /** Network fetches run here so a download never blocks behind audio that is playing. */
+    private static final ExecutorService fetchEs;
+    /** Playback is single-threaded so audio lines never overlap (one speaker at a time). */
+    private static final ExecutorService playbackEs;
 
     static {
         httpClient = HttpClients.createDefault();
@@ -41,11 +44,16 @@ public final class SlopTextToSpeechUtil {
                 }
                 """;
 
-        es = Executors.newSingleThreadExecutor(r -> {
+        fetchEs = Executors.newCachedThreadPool(daemonThreadFactory());
+        playbackEs = Executors.newSingleThreadExecutor(daemonThreadFactory());
+    }
+
+    private static java.util.concurrent.ThreadFactory daemonThreadFactory() {
+        return r -> {
             Thread t = new Thread(r);
             t.setDaemon(true);
             return t;
-        });
+        };
     }
 
     private SlopTextToSpeechUtil() {
@@ -162,14 +170,14 @@ public final class SlopTextToSpeechUtil {
                     playAudioFile(audioFile);
                     // Clean up temp file after playback
                     audioFile.delete();
-                }, es);
-                
+                }, playbackEs);
+
                 return new TTSResult(duration, playbackFuture);
-                
+
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        }, es);
+        }, fetchEs);
     }
 
     // TODO: Add proximity thingies
@@ -199,6 +207,6 @@ public final class SlopTextToSpeechUtil {
             } catch(IOException e) {
                 throw new RuntimeException(e);
             }
-        }, es);
+        }, playbackEs);
     }
 }

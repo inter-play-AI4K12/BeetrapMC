@@ -125,7 +125,13 @@ public class BeeNestController {
             return;
         }
 
-        this.spawnPollen(flowerManager.getFlowerEntity(f).getPos(), this.nest.getPos(), 1 / 20f);
+        var entity = flowerManager.getFlowerEntity(f);
+        if(entity == null) {
+            // The bud's entity can be gone (e.g. already bloomed/removed); skip this frame.
+            return;
+        }
+
+        this.spawnPollen(entity.getPos(), this.nest.getPos(), 1 / 20f);
     }
 
     public void tickCircleBetweenAAndInfinity(long ticks, double r, long a) {

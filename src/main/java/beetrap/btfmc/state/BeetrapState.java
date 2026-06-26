@@ -168,6 +168,15 @@ public abstract class BeetrapState implements Iterable<Flower> {
 
     }
 
+    /**
+     * Called when a player sends a chat message while this state is active. Default is a no-op;
+     * states that ask the player a question (e.g. the Filter Bubble debrief) override this to react
+     * to the reply. The message also reaches the agent independently for the LLM response.
+     */
+    public void onPlayerChat(ServerPlayerEntity player, String message) {
+
+    }
+
     public final Vec3d getBeeNestMinecraftPosition() {
         return this.beeNestMinecraftPosition;
     }

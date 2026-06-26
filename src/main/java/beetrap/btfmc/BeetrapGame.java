@@ -200,7 +200,10 @@ public class BeetrapGame {
 
     public void onChatMessageMessage(SignedMessage signedMessage,
             ServerPlayerEntity serverPlayerEntity, Parameters parameters) {
-        this.agent.onChatMessageReceived(serverPlayerEntity, signedMessage.getSignedContent());
+        String content = signedMessage.getSignedContent();
+        this.agent.onChatMessageReceived(serverPlayerEntity, content);
+        // Also let the active state observe the reply (e.g. the debrief waiting on "why did it die?").
+        this.stateManager.onPlayerChatMessage(serverPlayerEntity, content);
     }
 
     public void dispose() {

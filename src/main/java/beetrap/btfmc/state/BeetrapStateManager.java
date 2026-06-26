@@ -57,6 +57,9 @@ public class BeetrapStateManager {
     private final Deque<Map<String, Object>> pendingAgentEvents;
     private String lastRankedBudsSignature;
     private double lastDiversityScore;
+    private boolean bipTimeTravelArmed;
+    private boolean bipTimeTravelNarrated;
+    private boolean timeTravelItemsGiven;
 
     public BeetrapStateManager(ServerWorld world, FlowerManager flowerManager,
             PlayerInteractionService interaction, BeeNestController beeNestController,
@@ -241,6 +244,7 @@ public class BeetrapStateManager {
                 }
 
                 this.net.beetrapLog(BEETRAP_LOG_ID_TIME_MACHINE_FORWARD, "");
+                this.maybeNarrateTimeTravel();
             }
 
             if(n == -1) {
@@ -258,8 +262,50 @@ public class BeetrapStateManager {
                 this.setState(new TimeTravelableBeetrapState(prs));
 
                 this.net.beetrapLog(BEETRAP_LOG_ID_TIME_MACHINE_BACKWARD, "");
+                this.maybeNarrateTimeTravel();
             }
         }
+    }
+
+    /** Fire the armed time-travel beat once, the first time the player rewinds the garden. */
+    private void maybeNarrateTimeTravel() {
+        if(this.bipTimeTravelArmed && !this.bipTimeTravelNarrated) {
+            this.bipTimeTravelNarrated = true;
+            this.recordAgentEvent("activity_beat",
+                    Map.of("activity", "pollinate", "beat", "time_travel"));
+        }
+    }
+
+    /** Forward a player chat message to the active state (the agent handles the LLM side). */
+    public void onPlayerChatMessage(ServerPlayerEntity player, String message) {
+        this.state.onPlayerChat(player, message);
+    }
+
+    /**
+     * Arm a one-shot "Bip reacts to time travel" beat. Set by the activity that hands the clocks
+     * over, so the first time the player actually rewinds the garden Bip comments on what changed.
+     */
+    public void armBipTimeTravelNarration() {
+        this.bipTimeTravelArmed = true;
+    }
+
+    /**
+     * Give the time-travel clocks to every player, at most once. Called both by the agent's
+     * {@code give_clocks} command (so the items appear exactly when Bip says "take these") and as
+     * a fallback from the activity state, so the player always ends up with them exactly once.
+     */
+    public void giveTimeTravelItemsToAllPlayers() {
+        if(this.timeTravelItemsGiven) {
+            return;
+        }
+        this.timeTravelItemsGiven = true;
+        for(ServerPlayerEntity player : this.world.getPlayers()) {
+            this.interaction.giveTimeTravelItemsToPlayer(player);
+        }
+    }
+
+    public boolean timeTravelItemsGiven() {
+        return this.timeTravelItemsGiven;
     }
 
     public void onMultipleChoiceSelectionResultReceived(String questionId, int option) {
@@ -427,6 +473,10 @@ public class BeetrapStateManager {
             this.pendingAgentEvents.pollFirst();
         }
         this.pendingAgentEvents.addLast(event);
+    }
+
+    public boolean hasPendingAgentEvents() {
+        return !this.pendingAgentEvents.isEmpty();
     }
 
     public List<Map<String, Object>> drainAgentEvents() {
