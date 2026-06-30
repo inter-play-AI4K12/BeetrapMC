@@ -15,10 +15,10 @@ import net.minecraft.util.math.Vec3d;
  */
 public class FilterBubbleBipScriptedPollinationReadyState extends PollinationReadyState {
 
-    // Per-task escalation: gentle nudge ~10s of stalling, explicit help ~22s. The clock resets
+    // Per-task escalation: gentle nudge ~15s of stalling, explicit help ~30s. The clock resets
     // whenever the player engages (moves their crosshair onto a flower), so it only fires for a
     // player who is genuinely stuck on the current sub-task.
-    private final HintEscalator hints = new HintEscalator(200, 440);
+    private final HintEscalator hints = new HintEscalator(300, 600);
     private boolean welcomed;
     private boolean hasTargetedFlower;
     private boolean lookHinted;       // a "look at a flower" nudge has fired at least once
@@ -52,8 +52,11 @@ public class FilterBubbleBipScriptedPollinationReadyState extends PollinationRea
         this.clearItems();
         if (this.stage == 0) {
             // Intro fires promptly — "pollinate any flower and let's see what happens".
-            if (this.ticks == 20) {
-                this.emitBeat("intro");
+            if (this.ticks == 5) {
+                // Greet only the first time Bip meets the player this run; otherwise jump in.
+                this.emitBeat(beetrap.btfmc.Beetrapfabricmc.BIP_INTRODUCED
+                        ? "intro_returning" : "intro");
+                beetrap.btfmc.Beetrapfabricmc.BIP_INTRODUCED = true;
                 this.welcomed = true;
             }
 

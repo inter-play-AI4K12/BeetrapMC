@@ -20,6 +20,9 @@ public class Beetrapfabricmc implements ModInitializer {
 
     public static boolean PLAYER_DATA_CONSENT = false;
     public static boolean CONSENT_ANSWERED = false;
+    // True once Bip has greeted/introduced himself this run, so later activities (Observe, Filter
+    // Bubble, …) skip the "Hi, I'm Bip Buzzley" line and jump straight into the activity.
+    public static boolean BIP_INTRODUCED = false;
     public static String PARTICIPANT_ID = null;
     public static String SESSION_CODE;
     public static String TIMESTAMP;

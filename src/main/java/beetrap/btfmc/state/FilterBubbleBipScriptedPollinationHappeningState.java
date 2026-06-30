@@ -31,10 +31,16 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
 
     // Debrief pacing (ticks since the phase began; 20 ticks = 1s).
     private static final int POINT_BEFORE_ASK = 90;       // admire new flowers, then ask why one died
-    private static final int ANSWER_NUDGE_DELAY = 180;    // ~9s of silence before Bip pressures for a guess
-    private static final int MAX_ANSWER_NUDGES = 2;       // pressure twice, then move on rather than stall
+    private static final int ANSWER_NUDGE_DELAY = 400;    // ~20s of silence before Bip nudges for a guess
+    private static final int MAX_ANSWER_NUDGES = 2;       // nudge twice, then wait silently
+    private static final int ASK_PHASE_TIMEOUT = 6000;    // absolute hard cap: ~5 min before giving up
     private static final int NO_QA_PAUSE = 120;           // when Q&A is off Bip just states the cause
-    private static final int REFINE_DELAY = 40;           // brief beat so the personalized reply leads the clocks
+    // Clock hand-off should never pile on top of Bip's reply to the player's answer. Instead of a
+    // fixed delay (which loses the race to mic/LLM latency), wait until Bip has gone quiet for
+    // REFINE_SETTLE, with a minimum wait so a slow reply has time to start, and a hard fallback.
+    private static final int REFINE_SETTLE = 30;          // Bip must be silent this long (~1.5s) first
+    private static final int MIN_REFINE_SILENT = 20;      // min wait when no spoken reply is coming
+    private static final int REFINE_WAIT_MAX = 220;       // fallback: hand off anyway after ~11s
     private static final int HANDOFF_AFTER_CLOCKS = 40;   // once clocks land, brief beat then enable time travel
     private static final int HANDOFF_MAX = 240;           // fallback: give + proceed if no clocks command arrives
 
@@ -60,6 +66,10 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
     private long clocksGivenTick = -1;
     private long lastPromptTick;   // when Bip last asked/pressed for the why-it-died answer
     private int answerNudges;       // how many times Bip has pressured for a guess
+    // PHASE_REFINE bookkeeping for sequencing the clock hand-off cleanly after Bip's spoken reply.
+    private boolean bipWentIdle;          // Bip has finished the why-dead question (gone idle once)
+    private boolean sawBipReply;          // Bip then started speaking again (his reply to the answer)
+    private long bipQuietSinceTick = -1;  // first tick Bip has been quiet since that reply
 
     private int rankOneFlowerId = -1;
     private int newFlowerId = -1;
@@ -193,6 +203,22 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
     private void enterPhase(int phase) {
         this.phase = phase;
         this.phaseEnteredTick = this.ticks;
+        if (phase == PHASE_REFINE) {
+            this.bipWentIdle = false;
+            this.sawBipReply = false;
+            this.bipQuietSinceTick = -1;
+        }
+    }
+
+    /** True while Bip is still flying or speaking (a command is running or queued). */
+    private boolean agentBusy() {
+        var game = beetrap.btfmc.handler.BeetrapGameHandler.getGame();
+        if (game == null) {
+            return false;
+        }
+        var agent = game.getAgent();
+        return agent != null
+                && (agent.getCurrentCommandId() != null || agent.hasNextCommand());
     }
 
     /** First-round debrief: point out the deaths, ask why, wait for the answer, hand over clocks. */
@@ -223,24 +249,52 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
                     this.enterPhase(PHASE_REFINE);
                     break;
                 }
-                // No answer yet: wait, then pressure for a guess; after a couple of nudges, move
-                // on rather than stalling the game forever.
-                if (this.ticks - this.lastPromptTick >= ANSWER_NUDGE_DELAY) {
-                    if (this.answerNudges < MAX_ANSWER_NUDGES) {
-                        this.emitBeat("why_dead_nudge");
-                        this.answerNudges++;
-                        this.lastPromptTick = this.ticks;
-                    } else {
-                        this.enterPhase(PHASE_REFINE);
-                    }
+                // No answer yet: nudge them, then wait silently. Clocks are never given until the
+                // player actually responds — the whole point of the exchange. Only use the hard
+                // timeout if they've been completely silent for 5 minutes (safety valve only).
+                if (since >= ASK_PHASE_TIMEOUT) {
+                    this.enterPhase(PHASE_REFINE);
+                    break;
+                }
+                if (this.ticks - this.lastPromptTick >= ANSWER_NUDGE_DELAY
+                        && this.answerNudges < MAX_ANSWER_NUDGES) {
+                    this.emitBeat("why_dead_nudge");
+                    this.answerNudges++;
+                    this.lastPromptTick = this.ticks;
                 }
                 break;
             case PHASE_REFINE:
-                // If they answered, hold briefly so the personalized reply (already queued ahead of
-                // us on the single command channel) plays before the clock hand-off.
-                if (since >= (this.playerAnswered ? REFINE_DELAY : 0)) {
-                    this.emitBeat("clock_handoff");
-                    this.enterPhase(PHASE_HANDOFF);
+                // Sequence the clock hand-off cleanly so it never collides with Bip's reply to the
+                // player's answer (that reply arrives on a separate channel with mic/LLM latency).
+                boolean busy = this.agentBusy();
+                if (this.playerAnswered) {
+                    // Wait to see Bip finish the question (go idle), then START his reply (busy
+                    // again), then FINISH it (quiet for REFINE_SETTLE). Only then hand over. The
+                    // "idle first" gate stops a pre-reply idle gap from triggering an early hand-off.
+                    if (busy) {
+                        if (this.bipWentIdle) {
+                            this.sawBipReply = true;
+                        }
+                        this.bipQuietSinceTick = -1;
+                    } else {
+                        this.bipWentIdle = true;
+                        if (this.sawBipReply && this.bipQuietSinceTick < 0) {
+                            this.bipQuietSinceTick = this.ticks;
+                        }
+                    }
+                    boolean replyDone = this.sawBipReply && this.bipQuietSinceTick >= 0
+                            && this.ticks - this.bipQuietSinceTick >= REFINE_SETTLE;
+                    if (replyDone || since >= REFINE_WAIT_MAX) {
+                        this.emitBeat("clock_handoff");
+                        this.enterPhase(PHASE_HANDOFF);
+                    }
+                } else {
+                    // No spoken reply is coming (Q&A off, or the player never guessed). Just make
+                    // sure Bip isn't mid-sentence, hold a short beat, then hand over.
+                    if ((!busy && since >= MIN_REFINE_SILENT) || since >= REFINE_WAIT_MAX) {
+                        this.emitBeat("clock_handoff");
+                        this.enterPhase(PHASE_HANDOFF);
+                    }
                 }
                 break;
             case PHASE_HANDOFF:
