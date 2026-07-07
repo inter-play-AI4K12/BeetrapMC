@@ -36,6 +36,10 @@ public final class CommandHandler {
                 player.sendAbilitiesUpdate();
             }
 
+            // BIP_INTRODUCED is a JVM-wide static, so without this reset it stays true for the rest
+            // of the server process once Bip has ever greeted anyone — silently skipping the
+            // greeting/name-ask on every later playthrough in the same session.
+            beetrap.btfmc.Beetrapfabricmc.BIP_INTRODUCED = false;
             BeetrapGameHandler.createGame(server, aiLevel == null ? 0 : aiLevel);
         } catch(Throwable t) {
             LOG.error(t);

@@ -376,6 +376,14 @@ public class PhysicalAgentState extends AgentState {
             return;
         }
 
+        if(this.currentCommand.type().equalsIgnoreCase("done")) {
+            // A pure signal, not a physical action — always sequenced after the say command it
+            // belongs to, so it lands exactly when that reply has actually finished.
+            this.agent.signalConversationDone();
+            this.completeCommand();
+            return;
+        }
+
         this.completeCommand();
     }
 
@@ -415,14 +423,15 @@ public class PhysicalAgentState extends AgentState {
             }
         }
 
-        // Face a target whenever Bip is not flying and is essentially still — this keeps eye
-        // contact during idle/talking without fighting MoveControl (which steers the heading while
-        // flying and would otherwise cause left-right twitching). An explicit look_at override
-        // (e.g. glancing at a dead flower before reacting) always wins; otherwise face the player
-        // when that feature is on.
-        boolean flying = this.currentCommand != null
-                && "fly_to".equalsIgnoreCase(this.currentCommand.type());
-        if(!flying
+        // Face a target whenever MoveControl isn't actively steering and Bip is essentially still —
+        // this keeps eye contact during idle/talking without fighting MoveControl's own heading
+        // control (which would otherwise cause rapid left-right head twitching). Checking
+        // MoveControl.isMoving() directly (not just "is there a fly_to command") matters: idle
+        // wander also steers via MoveControl.moveTo() without going through a command at all, so a
+        // command-type check alone missed that case and let the two fight during idle hovering.
+        // An explicit look_at override (e.g. glancing at a dead flower before reacting) always wins;
+        // otherwise face the player when that feature is on.
+        if(!this.beeEntity.getMoveControl().isMoving()
                 && this.beeEntity.getVelocity().horizontalLengthSquared() < FACE_VELOCITY_EPSILON) {
             if(this.faceOverride != null) {
                 this.faceToward(this.faceOverride);
@@ -506,6 +515,14 @@ public class PhysicalAgentState extends AgentState {
         this.agent.getBeetrapStateManager()
                 .getJsonReadyDataForGpt(this.physicalAgent.getBeeEntity(), serverPlayerEntity,
                         contextInstructionBuilder);
+
+        // Lets the active activity state hand the LLM ground truth it otherwise has no visibility
+        // into (e.g. the real value behind a data-panel reading), so a chat reply can't be blindly
+        // affirmed when it's factually wrong.
+        String taskContext = this.agent.getBeetrapStateManager().getState().describeCurrentTaskForAgent();
+        if(taskContext != null && !taskContext.isBlank()) {
+            contextInstructionBuilder.append(taskContext).append(System.lineSeparator());
+        }
     }
 
     public void updateInstructions(ServerPlayerEntity serverPlayerEntity) {

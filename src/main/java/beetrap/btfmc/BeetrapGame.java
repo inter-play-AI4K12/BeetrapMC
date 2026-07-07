@@ -107,7 +107,17 @@ public class BeetrapGame {
         }
     }
 
+    /**
+     * Lazily create the real agent the first time a Bip-driven activity is picked from the menu.
+     * Every activity-selection branch calls this, so without the guard below, picking a SECOND
+     * activity (e.g. Filter Bubble after Observe) would tear down the still-live agent and its
+     * BeeCuriousService session — wiping Bip's conversation history (the player's name, everything
+     * said so far) even though it's the same playthrough. Keep the existing agent/session instead.
+     */
     public void newAgent() {
+        if(this.aiLevel == AGENT_LEVEL_PHYSICAL && this.agent instanceof RemotePhysicalAgent) {
+            return;
+        }
         switch(this.aiLevel) {
             case AGENT_LEVEL_PHYSICAL -> {
                 this.agent = new RemotePhysicalAgent(this.world, this.stateManager);

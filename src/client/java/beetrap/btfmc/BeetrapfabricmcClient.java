@@ -172,7 +172,8 @@ public class BeetrapfabricmcClient implements ClientModInitializer {
 
     private void onShowTextScreenReceived(ShowTextScreenS2CPayload showTextScreenS2CPacket,
             Context context) {
-        this.bg.showTextScreen(showTextScreenS2CPacket.text());
+        this.bg.showTextScreen(showTextScreenS2CPacket.text(), showTextScreenS2CPacket.imagePath(),
+                showTextScreenS2CPacket.imageWidth(), showTextScreenS2CPacket.imageHeight());
     }
 
     private void onShowTextInputScreenReceived(ShowTextInputScreenS2CPayload payload,

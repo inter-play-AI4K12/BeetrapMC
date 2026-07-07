@@ -3,6 +3,7 @@ package beetrap.btfmc.state;
 import static beetrap.btfmc.networking.BeetrapLogS2CPayload.BEETRAP_LOG_ID_POLLINATION_INITIATED;
 
 import beetrap.btfmc.flower.Flower;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.entity.ItemEntity;
@@ -15,14 +16,27 @@ import net.minecraft.util.math.Vec3d;
  */
 public class FilterBubbleBipScriptedPollinationReadyState extends PollinationReadyState {
 
-    // Per-task escalation: gentle nudge ~15s of stalling, explicit help ~30s. The clock resets
-    // whenever the player engages (moves their crosshair onto a flower), so it only fires for a
-    // player who is genuinely stuck on the current sub-task.
+    private static final int INTRO_TICK = 5;              // greet as soon as the stage settles
+    // Chat replies and scripted beats share one serialized call queue to the agent service, so a
+    // fixed delay can't reliably predict when a spoken line actually finishes (TTS duration
+    // varies). Wait for it to actually go quiet via agentBusy(), same pattern as elsewhere.
+    private static final int INTRO_SETTLE = 20;           // ~1s breather after intro finishes
+    private static final int INTRO_MAX_WAIT = 300;        // ~15s safety net
+    private static final int HOW_TO_TO_SUGGEST_DELAY = 50; // ~2.5s glance at the dialogue box
+
+    // Two escalating, unconditional reminders once a flower has been suggested — ~15s and ~30s
+    // after suggest_flower if the player still hasn't pollinated. Resets on active engagement
+    // (re-aiming at a flower), so it only fires for a player who is genuinely stalled.
     private final HintEscalator hints = new HintEscalator(300, 600);
     private boolean welcomed;
-    private boolean hasTargetedFlower;
-    private boolean lookHinted;       // a "look at a flower" nudge has fired at least once
-    private boolean pollinateGuided;  // the "now pollinate" guidance has been given on first aim
+    private Flower suggestedFlower;
+
+    private boolean introEmitted;
+    private boolean introSawBusy;
+    private long introQuietSinceTick = -1;
+    private boolean howToShown;
+    private long howToShownTick = -1;
+    private boolean suggestFlowerAttempted;
 
     public FilterBubbleBipScriptedPollinationReadyState(BeetrapState parent, int stage) {
         super(parent, stage);
@@ -32,6 +46,14 @@ public class FilterBubbleBipScriptedPollinationReadyState extends PollinationRea
     private void emitBeat(String beat) {
         this.stateManager.recordAgentEvent("activity_beat",
                 Map.of("activity", "pollinate", "beat", beat));
+    }
+
+    private void emitBeat(String beat, Map<String, Object> extra) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("activity", "pollinate");
+        details.put("beat", beat);
+        details.putAll(extra);
+        this.stateManager.recordAgentEvent("activity_beat", details);
     }
 
     private void clearItems() {
@@ -47,37 +69,86 @@ public class FilterBubbleBipScriptedPollinationReadyState extends PollinationRea
         }
     }
 
+    private Vec3d playerPos() {
+        return this.world.getPlayers().isEmpty()
+                ? Vec3d.ZERO : this.world.getPlayers().getFirst().getPos();
+    }
+
+    /** The flower nearest the player — an easy, obvious first suggestion. */
+    private Flower chooseSuggestionFlower() {
+        Vec3d player = this.playerPos();
+        Flower best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Flower f : this) {
+            if (f.hasWithered()) {
+                continue;
+            }
+            Vec3d position = this.flowerManager.getFlowerMinecraftPosition(this, f);
+            if (position == null) {
+                continue;
+            }
+            double distance = position.distanceTo(player);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = f;
+            }
+        }
+        return best;
+    }
+
     @Override
     public void tick() {
         this.clearItems();
         if (this.stage == 0) {
-            // Intro fires promptly — "pollinate any flower and let's see what happens".
-            if (this.ticks == 5) {
+            if (this.ticks == INTRO_TICK) {
                 // Greet only the first time Bip meets the player this run; otherwise jump in.
                 this.emitBeat(beetrap.btfmc.Beetrapfabricmc.BIP_INTRODUCED
                         ? "intro_returning" : "intro");
                 beetrap.btfmc.Beetrapfabricmc.BIP_INTRODUCED = true;
                 this.welcomed = true;
+                this.introEmitted = true;
             }
 
-            if (beetrap.btfmc.BipFeatures.TIERED_HINTS) {
-                // Escalate only after the intro, and only on the sub-task the player is stuck on.
-                if (this.welcomed) {
-                    int tier = this.hints.tick();
-                    if (tier >= 0) {
-                        String beat;
-                        if (this.hasTargetedFlower) {
-                            beat = "stuck_pollinate_" + tier;
-                        } else {
-                            beat = "stuck_look_" + tier;
-                            this.lookHinted = true;
-                        }
-                        this.emitBeat(beat);
-                    }
+            if (this.introEmitted && !this.howToShown) {
+                boolean busy = this.agentBusy();
+                if (busy) {
+                    this.introSawBusy = true;
+                    this.introQuietSinceTick = -1;
+                } else if (this.introSawBusy && this.introQuietSinceTick < 0) {
+                    this.introQuietSinceTick = this.ticks;
                 }
-            } else if (this.ticks == 60) {
-                // Hints off: a single full instruction.
-                this.emitBeat("instructions");
+                boolean introSettled = this.introSawBusy && this.introQuietSinceTick >= 0
+                        && this.ticks - this.introQuietSinceTick >= INTRO_SETTLE;
+                if (introSettled || this.ticks - INTRO_TICK >= INTRO_MAX_WAIT) {
+                    // Gives "Did you see that?" (suggest_flower) something concrete to refer to —
+                    // without this, the player has seen nothing happen yet and the line is a non
+                    // sequitur.
+                    this.showTextScreenToAllPlayers(
+                            "To pollinate, point at a flower. A hive will show up in slot 5. "
+                                    + "Holding it, right-click on any flower to pollinate it!",
+                            "gui/how_to_pollinate", 260, 247);
+                    this.howToShown = true;
+                    this.howToShownTick = this.ticks;
+                }
+            }
+
+            if (this.howToShown && !this.suggestFlowerAttempted
+                    && this.ticks - this.howToShownTick >= HOW_TO_TO_SUGGEST_DELAY) {
+                this.suggestFlowerAttempted = true;
+                this.suggestedFlower = this.chooseSuggestionFlower();
+                if (this.suggestedFlower != null) {
+                    Map<String, Object> extra = new LinkedHashMap<>();
+                    extra.put("flower_id", this.suggestedFlower.getNumber());
+                    extra.put("color", this.flowerManager.getFlowerMinecraftColor(this.suggestedFlower));
+                    this.emitBeat("suggest_flower", extra);
+                }
+            }
+
+            if (this.suggestedFlower != null) {
+                int tier = this.hints.tick();
+                if (tier >= 0) {
+                    this.emitBeat("pollinate_reminder_" + tier);
+                }
             }
         }
 
@@ -89,19 +160,7 @@ public class FilterBubbleBipScriptedPollinationReadyState extends PollinationRea
     public void onPlayerTargetNewEntity(ServerPlayerEntity player, boolean exists, int id) {
         // Keep the default behaviour (auto-equips the nest when aiming at a valid flower)...
         super.onPlayerTargetNewEntity(player, exists, id);
-        // ...and track the sub-task. Aiming at a real garden flower completes "look at a flower".
-        boolean wasTargeted = this.hasTargetedFlower;
-        Flower f = this.flowerManager.getFlowerByEntityId(this, id);
-        if (exists && f != null && this.hasFlower(f.getNumber()) && !f.hasWithered()) {
-            this.hasTargetedFlower = true;
-        }
-        // The moment a player who'd been stuck looking finally aims at a flower, jump straight to
-        // the pollinate guidance instead of waiting out another idle timer (which felt like silence).
-        if (!wasTargeted && this.hasTargetedFlower && this.lookHinted && !this.pollinateGuided) {
-            this.emitBeat("stuck_pollinate_0");
-            this.pollinateGuided = true;
-        }
-        // Moving the crosshair around the garden is active engagement — don't nag a busy player.
+        // ...moving the crosshair around the garden is active engagement — don't nag a busy player.
         this.hints.reset();
     }
 
@@ -110,7 +169,8 @@ public class FilterBubbleBipScriptedPollinationReadyState extends PollinationRea
         this.hasNextState = true;
         this.pastPollinationLocations.add(flowerMinecraftPosition);
         Vec3d pl = this.computeAveragePastPollinationPositions();
-        this.nextState = new FilterBubbleBipScriptedPollinationHappeningState(this, pl, this.stage);
+        this.nextState = new FilterBubbleBipScriptedPollinationHappeningState(
+                this, pl, this.stage, flower.getNumber());
         this.net.beetrapLog(BEETRAP_LOG_ID_POLLINATION_INITIATED, "");
     }
 

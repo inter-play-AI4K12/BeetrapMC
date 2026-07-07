@@ -60,6 +60,8 @@ public class BeetrapStateManager {
     private boolean bipTimeTravelArmed;
     private boolean bipTimeTravelNarrated;
     private boolean timeTravelItemsGiven;
+    private int pollinationRoundsCompleted;
+    private boolean diversityDropAgainNarrated;
 
     public BeetrapStateManager(ServerWorld world, FlowerManager flowerManager,
             PlayerInteractionService interaction, BeeNestController beeNestController,
@@ -128,10 +130,20 @@ public class BeetrapStateManager {
                         "next_state", this.state.getClass().getSimpleName(),
                         "diversity", newDiversity
                 ));
-                if(BipFeatures.EMOTION_PARTICLES && newDiversity < this.lastDiversityScore - 0.05) {
+                ++this.pollinationRoundsCompleted;
+                boolean dropped = newDiversity < this.lastDiversityScore - 0.05;
+                if(BipFeatures.EMOTION_PARTICLES && dropped) {
                     Vec3d nestPos = this.beeNestController.getBeeNestPosition();
                     this.world.spawnParticles(ParticleTypes.SMOKE,
                             nestPos.x, nestPos.y + 0.8, nestPos.z, 12, 0.6, 0.4, 0.6, 0.02);
+                }
+                // First round's drop is already covered by the why_dead/new_flowers debrief; only
+                // narrate a LATER round's drop, and only once (a repeated identical line each round
+                // would feel robotic rather than reactive).
+                if(!this.diversityDropAgainNarrated && this.pollinationRoundsCompleted > 1 && dropped) {
+                    this.diversityDropAgainNarrated = true;
+                    this.recordAgentEvent("activity_beat",
+                            Map.of("activity", "pollinate", "beat", "diversity_dropped_again"));
                 }
                 this.lastDiversityScore = newDiversity;
             }

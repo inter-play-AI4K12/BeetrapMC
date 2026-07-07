@@ -44,6 +44,9 @@ public class BeetrapGameClient {
     private boolean bPressed;
     private boolean hPressed;
     private String lastShownHint;
+    private String lastShownHintImage;
+    private int lastShownHintImageWidth;
+    private int lastShownHintImageHeight;
 
     public BeetrapGameClient() {
         this.client = MinecraftClient.getInstance();
@@ -51,6 +54,7 @@ public class BeetrapGameClient {
         this.currentSubActivity = SUB_ACTIVITY_NULL;
         this.hPressed = false;
         this.lastShownHint = null;
+        this.lastShownHintImage = null;
     }
 
     private void onSubActivity1() {
@@ -71,9 +75,17 @@ public class BeetrapGameClient {
     }
 
     private void handleHKeyPress() {
+        // Raw GLFW key state, unlike a real Fabric keybinding, does not automatically respect
+        // screen focus — so without this guard, typing a message containing the letter K (a very
+        // common letter: "ok", "like", "think"...) pops this screen up over the chat input.
+        if(this.client.currentScreen != null) {
+            this.hPressed = false;
+            return;
+        }
         if(glfwGetKey(this.client.getWindow().getHandle(), GLFW_KEY_K) == GLFW_PRESS) {
             if(!this.hPressed && this.lastShownHint != null) {
-                this.sq.push(new TextScreen(this.sq, this.lastShownHint));
+                this.sq.push(new TextScreen(this.sq, this.lastShownHint, this.lastShownHintImage,
+                        this.lastShownHintImageWidth, this.lastShownHintImageHeight));
             }
 
             this.hPressed = true;
@@ -205,8 +217,15 @@ public class BeetrapGameClient {
     }
 
     public void showTextScreen(String s) {
+        this.showTextScreen(s, "", 0, 0);
+    }
+
+    public void showTextScreen(String s, String imagePath, int imageWidth, int imageHeight) {
         this.lastShownHint = s;
-        this.sq.push(new TextScreen(this.sq, s));
+        this.lastShownHintImage = imagePath;
+        this.lastShownHintImageWidth = imageWidth;
+        this.lastShownHintImageHeight = imageHeight;
+        this.sq.push(new TextScreen(this.sq, s, imagePath, imageWidth, imageHeight));
     }
 
     public void showMultipleChoiceScreen(String questionId, String question, String[] choices) {

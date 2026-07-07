@@ -35,6 +35,11 @@ public abstract class Agent implements AutoCloseable {
     private volatile String currentCommandId;
     protected AgentState currentState;
     protected InstructionBuilder instructionBuilder;
+    // Set by a "done" command (see AgentCommandDeserializer / models.py ALLOWED_COMMANDS): the
+    // model's own signal that a conversational exchange is genuinely finished, so game states can
+    // advance precisely instead of guessing with a timer how long a reply takes — and, crucially,
+    // so a reply that itself asks a follow-up question is never mistaken for "done talking".
+    private volatile boolean conversationDone;
 
     public Agent(ServerWorld world, BeetrapStateManager beetrapStateManager, String name,
             AgentState initialAgentState) {
@@ -154,6 +159,18 @@ public abstract class Agent implements AutoCloseable {
 
     public boolean hasNextCommand() {
         return !this.agentCommandQueue.isEmpty();
+    }
+
+    /** Called when a "done" command is executed — see AgentState implementations. */
+    public void signalConversationDone() {
+        this.conversationDone = true;
+    }
+
+    /** One-shot read: true at most once per signal, so two callers can't both consume it. */
+    public boolean consumeConversationDone() {
+        boolean value = this.conversationDone;
+        this.conversationDone = false;
+        return value;
     }
 
     public String getCurrentCommandId() {

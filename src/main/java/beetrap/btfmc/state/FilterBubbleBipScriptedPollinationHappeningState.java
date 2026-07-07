@@ -28,19 +28,22 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
     // Must stay AFTER the pollen-fly window (BeeNestController MAX_CIRCLE_TICKS = 220): the bloom
     // removes the bud entities, and the animation dereferences them until then.
     private static final int BLOOM_TICK = 240;            // flowers bloom / some wither (~12s)
+    private static final int HIVE_MOVED_DELAY = 60;       // ~3s after new_flowers, so it never lands
+                                                            // back-to-back with it
 
     // Debrief pacing (ticks since the phase began; 20 ticks = 1s).
-    private static final int POINT_BEFORE_ASK = 90;       // admire new flowers, then ask why one died
+    private static final int POINT_BEFORE_ASK = 100;      // admire new flowers, then ask why one died
     private static final int ANSWER_NUDGE_DELAY = 400;    // ~20s of silence before Bip nudges for a guess
     private static final int MAX_ANSWER_NUDGES = 2;       // nudge twice, then wait silently
     private static final int ASK_PHASE_TIMEOUT = 6000;    // absolute hard cap: ~5 min before giving up
     private static final int NO_QA_PAUSE = 120;           // when Q&A is off Bip just states the cause
-    // Clock hand-off should never pile on top of Bip's reply to the player's answer. Instead of a
-    // fixed delay (which loses the race to mic/LLM latency), wait until Bip has gone quiet for
-    // REFINE_SETTLE, with a minimum wait so a slow reply has time to start, and a hard fallback.
+    // Clock hand-off should never pile on top of Bip's reply to the player's answer, and must never
+    // cut off a follow-up question Bip's OWN reply might ask. Prefers the model's "done" signal;
+    // if that never arrives, falls back to settle+grace, then a hard timeout. See ConversationWaiter.
     private static final int REFINE_SETTLE = 30;          // Bip must be silent this long (~1.5s) first
+    private static final int REFINE_GRACE = 300;          // ~15s grace for a follow-up after settling
     private static final int MIN_REFINE_SILENT = 20;      // min wait when no spoken reply is coming
-    private static final int REFINE_WAIT_MAX = 220;       // fallback: hand off anyway after ~11s
+    private static final int REFINE_WAIT_MAX = 1200;      // hard fallback: hand off anyway after ~60s
     private static final int HANDOFF_AFTER_CLOCKS = 40;   // once clocks land, brief beat then enable time travel
     private static final int HANDOFF_MAX = 240;           // fallback: give + proceed if no clocks command arrives
 
@@ -53,6 +56,7 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
 
     private final Vec3d pollinationCenter;
     private final int stage;
+    private final int pollinatedFlowerId;
     private Flower[] newFlowerCandidates;
     private Flower[] newFlowers;
     private int ticks;
@@ -64,23 +68,29 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
     private long phaseEnteredTick;
     private boolean playerAnswered;
     private long clocksGivenTick = -1;
-    private long lastPromptTick;   // when Bip last asked/pressed for the why-it-died answer
+    private long lastPromptTick;   // when the why-it-died question actually finished being spoken
     private int answerNudges;       // how many times Bip has pressured for a guess
-    // PHASE_REFINE bookkeeping for sequencing the clock hand-off cleanly after Bip's spoken reply.
-    private boolean bipWentIdle;          // Bip has finished the why-dead question (gone idle once)
-    private boolean sawBipReply;          // Bip then started speaking again (his reply to the answer)
-    private long bipQuietSinceTick = -1;  // first tick Bip has been quiet since that reply
+    // PHASE_ASK bookkeeping: why_dead involves look_before + say_before + fly_to + say, which can
+    // take several real seconds to fully play out. Don't start the nudge countdown until it has
+    // actually finished, or the nudge lands far sooner (relative to what the player heard) than
+    // the intended gap.
+    private boolean askSawBusy;
+    private boolean askQuestionSettled;
+    // Sequences the clock hand-off cleanly after Bip's reply to the player's answer.
+    private final ConversationWaiter refineWaiter =
+            new ConversationWaiter(REFINE_SETTLE, REFINE_GRACE, REFINE_WAIT_MAX);
+    private boolean hiveMovedSaid;
 
-    private int rankOneFlowerId = -1;
     private int newFlowerId = -1;
     private int witheredFlowerId = -1;
 
     public FilterBubbleBipScriptedPollinationHappeningState(BeetrapState state,
-            Vec3d pollinationCenter, int stage) {
+            Vec3d pollinationCenter, int stage, int pollinatedFlowerId) {
         super(state);
         this.pollinationCenter = pollinationCenter;
         this.active = true;
         this.stage = stage;
+        this.pollinatedFlowerId = pollinatedFlowerId;
     }
 
     /** Report a semantic beat; Python decides Bip's words/movement for it. */
@@ -133,9 +143,6 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
             fbe[i].setCustomName(Text.of(String.valueOf(r + 1)));
             fbe[i].setCustomNameVisible(true);
             this.newFlowers[r] = f;
-            if (r == 0) {
-                this.rankOneFlowerId = f.getNumber();
-            }
             ++r;
         }
         this.stateManager.recordBudsRanked(this.newFlowers, this.usingDiversifyingRankingMethod,
@@ -148,12 +155,12 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
         this.tickRankBuds();
     }
 
-    /** Once the buds have visibly sprouted and been numbered 1-5, explain that the numbers ARE
-     * the ranking. A single beat (not two) so the line plays before the bloom without backing up. */
+    /** Once the buds have visibly sprouted and been numbered 1-5, fly to the flower the player
+     * pollinated and ask what the numbers mean (a wonder, not a stated fact). */
     private void onBudsRanked() {
         if (this.ticks != BUDS_TICK) return;
         if (this.stage == 0) {
-            this.emitBeat("buds_ranked", this.rankOneFlowerId);
+            this.emitBeat("buds_ranked", this.pollinatedFlowerId);
         }
     }
 
@@ -200,25 +207,26 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
         }
     }
 
-    private void enterPhase(int phase) {
-        this.phase = phase;
-        this.phaseEnteredTick = this.ticks;
-        if (phase == PHASE_REFINE) {
-            this.bipWentIdle = false;
-            this.sawBipReply = false;
-            this.bipQuietSinceTick = -1;
+    /** A separate, purely factual beat a few seconds after new_flowers so the two lines never
+     * land back-to-back (only the first round; later rounds skip the debrief entirely). */
+    private void onHiveMoved() {
+        if (this.stage != 0 || this.hiveMovedSaid || this.phase != PHASE_POINT) return;
+        if (this.ticks - this.phaseEnteredTick >= HIVE_MOVED_DELAY) {
+            this.hiveMovedSaid = true;
+            this.emitBeat("hive_moved");
         }
     }
 
-    /** True while Bip is still flying or speaking (a command is running or queued). */
-    private boolean agentBusy() {
-        var game = beetrap.btfmc.handler.BeetrapGameHandler.getGame();
-        if (game == null) {
-            return false;
+    private void enterPhase(int phase) {
+        this.phase = phase;
+        this.phaseEnteredTick = this.ticks;
+        if (phase == PHASE_ASK) {
+            this.askSawBusy = false;
+            this.askQuestionSettled = false;
         }
-        var agent = game.getAgent();
-        return agent != null
-                && (agent.getCurrentCommandId() != null || agent.hasNextCommand());
+        if (phase == PHASE_REFINE && this.playerAnswered) {
+            this.refineWaiter.beginWaiting(this.ticks);
+        }
     }
 
     /** First-round debrief: point out the deaths, ask why, wait for the answer, hand over clocks. */
@@ -231,7 +239,6 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
                     if (this.witheredFlowerId >= 0) {
                         this.emitBeat("why_dead", this.witheredFlowerId);
                     }
-                    this.lastPromptTick = this.ticks;
                     this.enterPhase(PHASE_ASK);
                 }
                 break;
@@ -249,11 +256,25 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
                     this.enterPhase(PHASE_REFINE);
                     break;
                 }
-                // No answer yet: nudge them, then wait silently. Clocks are never given until the
-                // player actually responds — the whole point of the exchange. Only use the hard
-                // timeout if they've been completely silent for 5 minutes (safety valve only).
                 if (since >= ASK_PHASE_TIMEOUT) {
+                    // Only use the hard timeout if they've been completely silent for 5 minutes
+                    // (safety valve only) — clocks are never given until the player actually
+                    // responds, the whole point of the exchange.
                     this.enterPhase(PHASE_REFINE);
+                    break;
+                }
+                // Don't start the nudge countdown until why_dead has actually finished playing
+                // (look_before + say_before + fly_to + say can take several real seconds) — a
+                // countdown measured from emission instead of completion lands the nudge much
+                // sooner, relative to what the player heard, than the intended ~20s gap.
+                boolean askBusy = this.agentBusy();
+                if (!this.askQuestionSettled) {
+                    if (askBusy) {
+                        this.askSawBusy = true;
+                    } else if (this.askSawBusy) {
+                        this.askQuestionSettled = true;
+                        this.lastPromptTick = this.ticks;
+                    }
                     break;
                 }
                 if (this.ticks - this.lastPromptTick >= ANSWER_NUDGE_DELAY
@@ -264,28 +285,16 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
                 }
                 break;
             case PHASE_REFINE:
-                // Sequence the clock hand-off cleanly so it never collides with Bip's reply to the
-                // player's answer (that reply arrives on a separate channel with mic/LLM latency).
+                // Sequence the clock hand-off cleanly so it never collides with — or cuts off — a
+                // reply to the player's answer (that reply arrives on a separate channel with
+                // mic/LLM latency, and might itself ask a follow-up question).
                 boolean busy = this.agentBusy();
                 if (this.playerAnswered) {
-                    // Wait to see Bip finish the question (go idle), then START his reply (busy
-                    // again), then FINISH it (quiet for REFINE_SETTLE). Only then hand over. The
-                    // "idle first" gate stops a pre-reply idle gap from triggering an early hand-off.
-                    if (busy) {
-                        if (this.bipWentIdle) {
-                            this.sawBipReply = true;
-                        }
-                        this.bipQuietSinceTick = -1;
-                    } else {
-                        this.bipWentIdle = true;
-                        if (this.sawBipReply && this.bipQuietSinceTick < 0) {
-                            this.bipQuietSinceTick = this.ticks;
-                        }
-                    }
-                    boolean replyDone = this.sawBipReply && this.bipQuietSinceTick >= 0
-                            && this.ticks - this.bipQuietSinceTick >= REFINE_SETTLE;
-                    if (replyDone || since >= REFINE_WAIT_MAX) {
-                        this.emitBeat("clock_handoff");
+                    boolean proceed = this.refineWaiter.tick(this.ticks, busy,
+                            this.consumeConversationDone());
+                    if (proceed) {
+                        this.emitBeat(this.refineWaiter.everSawReply()
+                                ? "clock_handoff" : "clock_handoff_no_reply");
                         this.enterPhase(PHASE_HANDOFF);
                     }
                 } else {
@@ -340,6 +349,7 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
         this.enterPhase(PHASE_DONE);
         this.giveClocks();
         if (this.activityShouldEnd()) {
+            this.emitBeat("garden_died");
             this.stateManager.endActivity();
             this.nextState = new TimeTravelableBeetrapState(this);
         } else {
@@ -362,6 +372,7 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
                 this.ticks, this.flowerManager, this.newFlowerCandidates);
         this.onBudsRanked();
         this.onBloom();
+        this.onHiveMoved();
         this.tickDebrief();
         this.beeNestController.tickPollinationLines(this.ticks, this.pastPollinationLocations);
         ++this.ticks;
@@ -374,6 +385,21 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
     public BeetrapState getNextState() { return this.nextState; }
 
     @Override
+    public String describeCurrentTaskForAgent() {
+        // Without this, a chat reply has no idea it's in the middle of a specific, linear debrief
+        // and can wander off into suggesting new actions (e.g. "want to pollinate another one?")
+        // instead of staying with the withering-flower reflection that leads to the clock hand-off.
+        if (this.phase != PHASE_ASK && this.phase != PHASE_REFINE) {
+            return null;
+        }
+        return "CONTEXT: you are mid-conversation with the player about why a flower withered. "
+                + "Stay with this reflection only — do not suggest pollinating more flowers or any "
+                + "other new action. The game itself will hand you the time-travel clocks to give "
+                + "the player once this conversation naturally wraps up; you don't need to offer or "
+                + "explain that yourself.";
+    }
+
+    @Override
     public void onPlayerTargetNewEntity(ServerPlayerEntity player, boolean exists, int id) {
         super.onPlayerTargetNewEntity(player, false, id);
     }
@@ -384,6 +410,10 @@ public class FilterBubbleBipScriptedPollinationHappeningState extends BeetrapSta
         // waiting and let Bip refine their answer before handing over the clocks.
         if (this.phase == PHASE_ASK) {
             this.playerAnswered = true;
+        } else if (this.phase == PHASE_REFINE && this.refineWaiter.isWaiting()) {
+            // They kept talking — e.g. answering a follow-up Bip's own reply just asked. Extend
+            // the wait for that new reply cycle instead of handing off mid-conversation.
+            this.refineWaiter.extendWaiting();
         }
     }
 

@@ -89,6 +89,32 @@ public abstract class BeetrapState implements Iterable<Flower> {
         this.pastPollinationLocations = new ArrayList<>(state.pastPollinationLocations);
     }
 
+    /** True while Bip is still flying or speaking (a command is running or queued) — use this to
+     * detect when an LLM reply has actually landed instead of guessing with a fixed timer. Chat
+     * messages and scripted activity_beats share one serialized call queue to the agent service, so
+     * a slow LLM round-trip can genuinely take much longer than any short fixed delay. */
+    protected final boolean agentBusy() {
+        var game = beetrap.btfmc.handler.BeetrapGameHandler.getGame();
+        if(game == null) {
+            return false;
+        }
+        var agent = game.getAgent();
+        return agent != null && (agent.getCurrentCommandId() != null || agent.hasNextCommand());
+    }
+
+    /** One-shot: true at most once, the first time this is called after the model includes a
+     * "done" command — its own signal that a conversational exchange is genuinely finished (see
+     * ConversationWaiter). Prefer this over agentBusy() alone: going quiet doesn't mean an exchange
+     * is over if Bip's own reply just asked a follow-up question. */
+    protected final boolean consumeConversationDone() {
+        var game = beetrap.btfmc.handler.BeetrapGameHandler.getGame();
+        if(game == null) {
+            return false;
+        }
+        var agent = game.getAgent();
+        return agent != null && agent.consumeConversationDone();
+    }
+
     protected final void sendMessageToAllPlayers(String message) {
         for(ServerPlayerEntity player : this.world.getPlayers()) {
             player.sendMessage(Text.of(message));
@@ -98,6 +124,27 @@ public abstract class BeetrapState implements Iterable<Flower> {
     protected final void showTextScreenToAllPlayers(String message) {
         this.net.broadcastCustomPayload(
                 new ShowTextScreenS2CPayload(ShowTextScreenS2CPayload.lineWrap(message, 50)));
+    }
+
+    /**
+     * @param imagePath texture path relative to {@code textures/} without the {@code .png}
+     *                  extension (e.g. {@code "gui/observe_hover_example"}). Drawn at the default
+     *                  size (300x93) — use the 4-arg overload for a texture of a different size.
+     */
+    protected final void showTextScreenToAllPlayers(String message, String imagePath) {
+        this.showTextScreenToAllPlayers(message, imagePath, 0, 0);
+    }
+
+    /**
+     * @param imagePath   texture path relative to {@code textures/} without the {@code .png}
+     *                    extension (e.g. {@code "gui/how_to_pollinate"}).
+     * @param imageWidth  pixel width to draw the texture at (drawn 1:1 — must match the actual PNG).
+     * @param imageHeight pixel height to draw the texture at (drawn 1:1 — must match the actual PNG).
+     */
+    protected final void showTextScreenToAllPlayers(String message, String imagePath,
+            int imageWidth, int imageHeight) {
+        this.net.broadcastCustomPayload(new ShowTextScreenS2CPayload(
+                ShowTextScreenS2CPayload.lineWrap(message, 50), imagePath, imageWidth, imageHeight));
     }
 
     /**
@@ -175,6 +222,16 @@ public abstract class BeetrapState implements Iterable<Flower> {
      */
     public void onPlayerChat(ServerPlayerEntity player, String message) {
 
+    }
+
+    /**
+     * Optional ground-truth context appended to the LLM's per-chat-message context, for moments
+     * where the player might state a specific factual claim (a data-panel reading, a value, etc.)
+     * that the model would otherwise have no way to verify and would just conversationally affirm
+     * even if wrong. Default: none. Override to hand over the real value/answer to check against.
+     */
+    public String describeCurrentTaskForAgent() {
+        return null;
     }
 
     public final Vec3d getBeeNestMinecraftPosition() {
