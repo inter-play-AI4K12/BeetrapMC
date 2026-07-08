@@ -474,14 +474,16 @@ public class ObserveFlowersBipState extends BeetrapState {
         }
         sb.append(", NOT how the flower looks. If the player asks what this means or states a "
                 + "specific value, answer using this real definition — never invent a visual "
-                + "description or agree with an incorrect claim.");
+                + "description or agree with an incorrect claim. Use these numbers ONLY to check "
+                + "silently; NEVER say the numbers or boundary math out loud to the player.");
         if(this.searchSolved && this.lastCorrectFlower != null) {
             String actual = this.currentFeature == Feature.COLOR
                     ? this.flowerManager.getFlowerMinecraftColor(this.lastCorrectFlower)
                     : String.format(java.util.Locale.ROOT, "%.2f",
                             this.rawValueOf(this.lastCorrectFlower, this.currentFeature));
             sb.append(" The flower they just correctly picked has ").append(label).append(": ")
-                    .append(actual).append(" — verify any claim about it against this real reading.");
+                    .append(actual).append(" — verify any claim about it against this real reading, "
+                            + "but again, react naturally and never read this number out loud.");
         }
         return sb.toString();
     }

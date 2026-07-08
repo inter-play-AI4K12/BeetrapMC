@@ -59,6 +59,26 @@ public final class BeetrapGameHandler {
         game = null;
     }
 
+    /**
+     * Tears down the current game and starts a fresh one, the way the "restart" item does when a
+     * player moves from one activity to the next (e.g. Observe -> Filter Bubble). Unlike
+     * {@link #destroyGame()} + {@link #createGame}, this carries the current agent's
+     * BeeCuriousService session forward into the new game, so Bip's conversation history (the
+     * player's name, everything already discussed) survives — a plain destroy+create would delete
+     * that session and start Bip's memory over from nothing.
+     */
+    public static void restartGame(MinecraftServer server, int aiLevel) {
+        String carriedOverSessionId = hasGame() ? game.captureAgentSessionIdForCarryOver() : null;
+        if(hasGame()) {
+            game.disposeKeepingAgentSession();
+            game = null;
+        }
+        createGame(server, aiLevel);
+        if(carriedOverSessionId != null) {
+            game.setCarriedOverSessionId(carriedOverSessionId);
+        }
+    }
+
     public static void onPlayerTargetNewEntity(
             PlayerTargetNewEntityC2SPayload payload, Context context) {
         if(!hasGame()) {

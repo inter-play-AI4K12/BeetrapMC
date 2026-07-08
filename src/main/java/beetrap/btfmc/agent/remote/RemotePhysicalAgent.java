@@ -51,6 +51,20 @@ public class RemotePhysicalAgent extends PhysicalAgent {
      * Spawns Bip and begins an asynchronous BeeCuriousService session.
      */
     public RemotePhysicalAgent(ServerWorld world, BeetrapStateManager beetrapStateManager) {
+        this(world, beetrapStateManager, null);
+    }
+
+    /**
+     * @param existingAgentSessionId if non-null, resumes that BeeCuriousService session directly
+     *                               instead of creating a new one — used when restarting into a new
+     *                               game so Bip's conversation history (the player's name, everything
+     *                               already discussed) carries over instead of starting fresh. If the
+     *                               session turns out to be gone (e.g. the service restarted), the
+     *                               existing 404 handling in {@link #sendEvent} already recovers by
+     *                               creating a fresh one.
+     */
+    public RemotePhysicalAgent(ServerWorld world, BeetrapStateManager beetrapStateManager,
+            String existingAgentSessionId) {
         super(world, beetrapStateManager);
         this.remoteAgentClient = new RemoteAgentClient(getServiceUrl());
         this.connectionLock = new Object();
@@ -58,7 +72,19 @@ public class RemotePhysicalAgent extends PhysicalAgent {
         this.pendingEvents = new ArrayDeque<>();
         this.eventChain = CompletableFuture.completedFuture(null);
         this.heartbeatTicks = 0;
-        this.startSessionConnection();
+        if(existingAgentSessionId != null && !existingAgentSessionId.isBlank()) {
+            this.agentSessionId = existingAgentSessionId;
+        } else {
+            this.startSessionConnection();
+        }
+    }
+
+    /** @return the current BeeCuriousService session id, or null if not yet connected. Used to
+     * carry the session forward into a restarted game instead of starting Bip's memory over. */
+    public String getAgentSessionId() {
+        synchronized(this.connectionLock) {
+            return this.agentSessionId;
+        }
     }
 
     @Override

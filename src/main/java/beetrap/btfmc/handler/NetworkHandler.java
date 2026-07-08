@@ -73,9 +73,6 @@ public final class NetworkHandler {
         PayloadTypeRegistry.playC2S()
                 .register(RestartGameC2SPayload.ID, RestartGameC2SPayload.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(RestartGameC2SPayload.ID,
-                (payload, context) -> {
-                    BeetrapGameHandler.destroyGame();
-                    BeetrapGameHandler.createGame(context.server(), 3);
-                });
+                (payload, context) -> BeetrapGameHandler.restartGame(context.server(), 3));
     }
 }

@@ -93,11 +93,20 @@ public class TextScreen extends Screen {
 
         int buttonHeight = 20;
         int gap = 10;
+        int margin = 5;
         int textBlockHeight = ot.size() * (TEXT_WIDGET_HEIGHT + 2);
         int imageBlockHeight = this.hasImage ? gap + this.imageHeight : 0;
         int totalHeight = textBlockHeight + imageBlockHeight + gap + buttonHeight;
 
         int y = (this.height - totalHeight) / 2;
+        y = Math.max(y, margin);
+        // A too-tall image (or a screen at a high GUI scale) could otherwise push the Confirm
+        // button past the bottom edge, stranding the player with no way to dismiss the screen —
+        // pull the whole block up so the button always stays reachable, even if that means less
+        // breathing room above it.
+        if(y + totalHeight > this.height - margin) {
+            y = Math.max(margin, this.height - margin - totalHeight);
+        }
         for(OrderedText text : ot) {
             TextWidget tw = new TextWidget(TEXT_WIDGET_WIDTH, TEXT_WIDGET_HEIGHT,
                     this.orderedTextToText(text), this.textRenderer);

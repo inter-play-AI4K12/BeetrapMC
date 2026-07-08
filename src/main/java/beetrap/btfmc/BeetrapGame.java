@@ -56,6 +56,9 @@ public class BeetrapGame {
     private final int aiLevel;
     private long lastTickTime;
     private Agent agent;
+    // Set by BeetrapGameHandler.restartGame() right after construction; consumed once by
+    // newAgent() to resume the previous BeeCuriousService session instead of starting fresh.
+    private String carriedOverSessionId;
 
     public BeetrapGame(MinecraftServer server, Vector3i bottomLeft, Vector3i topRight,
             int aiLevel) {
@@ -120,7 +123,9 @@ public class BeetrapGame {
         }
         switch(this.aiLevel) {
             case AGENT_LEVEL_PHYSICAL -> {
-                this.agent = new RemotePhysicalAgent(this.world, this.stateManager);
+                this.agent = new RemotePhysicalAgent(this.world, this.stateManager,
+                        this.carriedOverSessionId);
+                this.carriedOverSessionId = null;
             }
 
             default -> {
@@ -133,6 +138,18 @@ public class BeetrapGame {
 
     public Agent getAgent() {
         return this.agent;
+    }
+
+    /** See {@link #carriedOverSessionId}. */
+    public void setCarriedOverSessionId(String sessionId) {
+        this.carriedOverSessionId = sessionId;
+    }
+
+    /** @return the current agent's BeeCuriousService session id, if it has one worth carrying
+     * over into a restarted game (so the new agent resumes the same conversation), else null. */
+    public String captureAgentSessionIdForCarryOver() {
+        return this.agent instanceof RemotePhysicalAgent remotePhysicalAgent
+                ? remotePhysicalAgent.getAgentSessionId() : null;
     }
 
     public MinecraftServer getServer() {
@@ -217,6 +234,25 @@ public class BeetrapGame {
     }
 
     public void dispose() {
+        this.disposeWorldResources();
+        try {
+            this.agent.close();
+        } catch(Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Like {@link #dispose()}, but deliberately does NOT close the agent's BeeCuriousService
+     * session — used when restarting into a new BeetrapGame that will carry that same session
+     * forward (see {@link #captureAgentSessionIdForCarryOver()}), so Bip's conversation history
+     * survives the restart instead of being deleted along with the old game.
+     */
+    public void disposeKeepingAgentSession() {
+        this.disposeWorldResources();
+    }
+
+    private void disposeWorldResources() {
         this.world.setBlockState(new BlockPos(CHANGE_RANKING_METHOD_LEVER_POSITION.getX(),
                         CHANGE_RANKING_METHOD_LEVER_POSITION.getY() - 1,
                         CHANGE_RANKING_METHOD_LEVER_POSITION.getZ() - 1),
@@ -235,10 +271,5 @@ public class BeetrapGame {
         this.gardenInformationBossBar.dispose();
         this.flowerValueScoreboardDisplayerService.dispose();
         this.interaction.dispose();
-        try {
-            this.agent.close();
-        } catch(Exception e) {
-            throw new RuntimeException(e);
-        }
     }
 }

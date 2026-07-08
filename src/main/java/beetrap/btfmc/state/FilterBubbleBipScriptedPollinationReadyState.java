@@ -126,7 +126,7 @@ public class FilterBubbleBipScriptedPollinationReadyState extends PollinationRea
                     this.showTextScreenToAllPlayers(
                             "To pollinate, point at a flower. A hive will show up in slot 5. "
                                     + "Holding it, right-click on any flower to pollinate it!",
-                            "gui/how_to_pollinate", 260, 247);
+                            "gui/how_to_pollinate", 140, 133);
                     this.howToShown = true;
                     this.howToShownTick = this.ticks;
                 }
