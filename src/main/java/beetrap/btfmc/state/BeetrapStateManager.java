@@ -11,9 +11,11 @@ import beetrap.btfmc.BeeNestController;
 import beetrap.btfmc.BipFeatures;
 import beetrap.btfmc.GardenInformationBossBar;
 import beetrap.btfmc.PlayerInteractionService;
+import beetrap.btfmc.TutorialFlow;
 import beetrap.btfmc.flower.Flower;
 import beetrap.btfmc.flower.FlowerManager;
 import beetrap.btfmc.flower.FlowerPool;
+import beetrap.btfmc.flower.FlowerTraits;
 import beetrap.btfmc.flower.FlowerValueScoreboardDisplayerService;
 import beetrap.btfmc.networking.NetworkingService;
 import beetrap.btfmc.networking.PlayerTimeTravelRequestC2SPayload.Operations;
@@ -62,6 +64,19 @@ public class BeetrapStateManager {
     private boolean timeTravelItemsGiven;
     private int pollinationRoundsCompleted;
     private boolean diversityDropAgainNarrated;
+    // Which Python beat table (activities.py) the game-level Bip beats below belong to — set by
+    // the Bip activity that is running, so e.g. the time-travel reaction matches its stance.
+    private String bipActivity = "pollinate";
+    // What Bip can "see" beyond the flower list: the flower on the player's data panel, the latest
+    // bud ranking, and the diversity target (game 4). Fed into every chat context.
+    private Flower lastTargetedFlower;
+    private List<Integer> lastRankedFlowerIds = List.of();
+    private boolean lastRankingDiversifying;
+    private double diversityTarget = -1;
+    private Vec3d portalPosition;
+    private static final long PORTAL_NUDGE_TICKS = 1200;   // ~1 min before Bip points it out again
+    private long portalOpenedTick;
+    private boolean portalNudged;
 
     public BeetrapStateManager(ServerWorld world, FlowerManager flowerManager,
             PlayerInteractionService interaction, BeeNestController beeNestController,
@@ -101,6 +116,47 @@ public class BeetrapStateManager {
         this.activityEnded = true;
     }
 
+    /**
+     * A Bip-led stage just finished its closing lines: end the activity and open the portal to the
+     * next stage (Base 2's continuous flow, see {@link TutorialFlow}). After the last tutorial stage
+     * the portal leads to the stage menu instead.
+     */
+    public void completeBipStage() {
+        if(this.activityEnded) {
+            return;
+        }
+        this.endActivity();
+        boolean finishedTutorial = TutorialFlow.onStageComplete();
+        this.net.beetrapLog(finishedTutorial ? "tutorial_complete" : "stage_complete",
+                "activity=" + TutorialFlow.currentActivity
+                        + " next=" + TutorialFlow.pendingActivity);
+        if(finishedTutorial) {
+            this.recordAgentEvent("activity_beat",
+                    Map.of("activity", "flow", "beat", "tutorial_done"));
+        }
+        if(!this.world.getPlayers().isEmpty()) {
+            this.portalPosition = TutorialFlow.openPortal(this.world,
+                    this.world.getPlayers().getFirst());
+            this.portalOpenedTick = this.world.getTime();
+            this.portalNudged = false;
+            this.recordAgentEvent("activity_beat",
+                    Map.of("activity", "flow", "beat", "portal_open"));
+        }
+    }
+
+    /** Watch the portal: entering it moves on; a gentle reminder if the player hangs back. */
+    private void tickPortal() {
+        if(!TutorialFlow.portalOpen()) {
+            return;
+        }
+        TutorialFlow.tickPortal(this.world);
+        if(!this.portalNudged && this.world.getTime() - this.portalOpenedTick >= PORTAL_NUDGE_TICKS) {
+            this.portalNudged = true;
+            this.recordAgentEvent("activity_beat",
+                    Map.of("activity", "flow", "beat", "portal_nudge"));
+        }
+    }
+
     public boolean isActivityEnded() {
         return this.activityEnded;
     }
@@ -114,6 +170,7 @@ public class BeetrapStateManager {
     }
 
     public void tick() {
+        this.tickPortal();
         if(this.activityEnded) {
             this.world.getPlayers().forEach(
                     BeetrapStateManager.this.interaction::giveRestartGameItemToPlayer);
@@ -143,7 +200,7 @@ public class BeetrapStateManager {
                 if(!this.diversityDropAgainNarrated && this.pollinationRoundsCompleted > 1 && dropped) {
                     this.diversityDropAgainNarrated = true;
                     this.recordAgentEvent("activity_beat",
-                            Map.of("activity", "pollinate", "beat", "diversity_dropped_again"));
+                            Map.of("activity", this.bipActivity, "beat", "diversity_dropped_again"));
                 }
                 this.lastDiversityScore = newDiversity;
             }
@@ -205,7 +262,36 @@ public class BeetrapStateManager {
     }
 
     public void onPlayerTargetNewEntity(ServerPlayerEntity player, boolean exists, int id) {
+        if(exists) {
+            Flower targeted = this.flowerManager.getFlowerByEntityId(this.state, id);
+            if(targeted != null) {
+                this.lastTargetedFlower = targeted;
+            }
+        }
         this.state.onPlayerTargetNewEntity(player, exists, id);
+    }
+
+    /** The flower whose numbers the player's data panel is showing (the last one aimed at). */
+    public Flower getLastTargetedFlower() {
+        return this.lastTargetedFlower;
+    }
+
+    public String getBipActivity() {
+        return this.bipActivity;
+    }
+
+    /** Where the between-stage portal stands (Base 2), so Bip can fly to it; null = none. */
+    public Vec3d getPortalPosition() {
+        return this.portalPosition;
+    }
+
+    public void setPortalPosition(Vec3d portalPosition) {
+        this.portalPosition = portalPosition;
+    }
+
+    /** Game 4's diversity score to beat, shown to Bip; negative = no target. */
+    public void setDiversityTarget(double target) {
+        this.diversityTarget = target;
     }
 
     private PollinationReadyState getPreviousPollinationReadyState(int[] index) {
@@ -284,7 +370,7 @@ public class BeetrapStateManager {
         if(this.bipTimeTravelArmed && !this.bipTimeTravelNarrated) {
             this.bipTimeTravelNarrated = true;
             this.recordAgentEvent("activity_beat",
-                    Map.of("activity", "pollinate", "beat", "time_travel"));
+                    Map.of("activity", this.bipActivity, "beat", "time_travel"));
         }
     }
 
@@ -299,6 +385,11 @@ public class BeetrapStateManager {
      */
     public void armBipTimeTravelNarration() {
         this.bipTimeTravelArmed = true;
+    }
+
+    /** Name the Python beat table ("pollinate", "recommend", ...) for game-level Bip beats. */
+    public void setBipActivity(String activity) {
+        this.bipActivity = activity;
     }
 
     /**
@@ -419,48 +510,78 @@ public class BeetrapStateManager {
         return new String[]{distance, angle};
     }
 
+    /**
+     * Everything Bip can "see", written into the context of each chat message: the game state, the
+     * player's data panel, the latest bud ranking, and every flower with its data panel numbers.
+     */
     public void getJsonReadyDataForGpt(Entity agentEntity, ServerPlayerEntity serverPlayerEntity,
             StringBuilder sb) {
-        sb.append("Player position: ").append(this.world.getPlayers().getFirst().getPos())
-                .append(System.lineSeparator());
-        sb.append(
-                        "Flowers (Note that in terms of distance, close < within_reach < big_in_view < need_to_walk_a_bit < far): ")
-                .append(System.lineSeparator());
+        String nl = System.lineSeparator();
+        sb.append("Player position: ").append(serverPlayerEntity.getPos()).append(nl);
 
+        sb.append("GAME STATE:").append(nl)
+                .append("- Stage: ").append(this.bipActivity)
+                .append(" (").append(this.state.getClass().getSimpleName()).append(")").append(nl)
+                .append(String.format("- Diversity score (bar at the top of the screen): %d, "
+                                + "started this stage at %d",
+                        (int)this.state.computeDiversityScore(),
+                        (int)this.initialDiversityScore));
+        if(this.diversityTarget > 0) {
+            sb.append(String.format(", target to beat: %d", (int)this.diversityTarget));
+        }
+        sb.append(nl);
+        Vec3d hive = this.beeNestController.getBeeNestPosition();
+        sb.append(String.format("- Beehive at (%.1f, %.1f, %.1f), pollen circle radius %.1f%n",
+                hive.x, hive.y, hive.z, this.state.pollinationCircleRadius));
+        sb.append("- Hive ranking method: ").append(this.state.usingDiversifyingRankingMethod
+                ? "picks buds DIFFERENT from what the player likes (lever on)"
+                : "picks buds closest to what the player likes").append(nl);
+        if(!this.lastRankedFlowerIds.isEmpty()) {
+            sb.append("- Latest bud ranking (1 = top pick):");
+            for(int i = 0; i < this.lastRankedFlowerIds.size(); ++i) {
+                Flower f = this.state.getFlowerPool().getFlowerByNumber(this.lastRankedFlowerIds.get(i));
+                sb.append(' ').append(i + 1).append(": flower ").append(f.getNumber())
+                        .append(" (").append(this.flowerManager.getFlowerMinecraftColor(f)).append(")");
+            }
+            sb.append(this.lastRankingDiversifying ? " [diversifying]" : "").append(nl);
+        }
+        sb.append("- Time travel clocks: ")
+                .append(this.timeTravelItemsGiven ? "player has them" : "not given yet").append(nl);
+
+        sb.append("DATA PANEL (the right side of the player's screen, showing the last flower they "
+                + "pointed at): ");
+        if(this.lastTargetedFlower == null) {
+            sb.append("empty, the player hasn't pointed at a flower yet").append(nl);
+        } else {
+            sb.append(FlowerTraits.describe(this.lastTargetedFlower,
+                    this.flowerManager.getFlowerMinecraftColor(this.lastTargetedFlower))).append(nl);
+        }
+
+        sb.append("FLOWERS IN THE GARDEN (data panel numbers; distance words: close < within_reach "
+                + "< big_in_view < need_to_walk_a_bit < far):").append(nl);
         Vec3d playerPos = serverPlayerEntity.getPos();
         Vec3d agentPos = agentEntity.getPos();
-
-        LOG.info("Player head yaw: {}", serverPlayerEntity.getHeadYaw());
-        LOG.info("Agent head yaw: {}", agentEntity.getHeadYaw());
-
         for(Flower f : this.state) {
             Vec3d flowerPos = this.flowerManager.getFlowerMinecraftPosition(this.state, f);
+            if(flowerPos == null) {
+                continue;
+            }
 
             Vector2d pc = this.toPolarCoordinatesRelativeToPos(playerPos, flowerPos);
-            double r = pc.x;
-            double theta = pc.y;
-            theta = this.clampRadians(theta + Math.toRadians(serverPlayerEntity.getHeadYaw()));
-            String[] pcp = this.getStringifiedPolarCoordinates(r, theta);
-
-            LOG.info("Flower {} angle to player: {}", f.getNumber(), Math.toDegrees(theta));
+            double theta = this.clampRadians(pc.y + Math.toRadians(serverPlayerEntity.getHeadYaw()));
+            String[] pcp = this.getStringifiedPolarCoordinates(pc.x, theta);
 
             pc = this.toPolarCoordinatesRelativeToPos(agentPos, flowerPos);
-            r = pc.x;
-            theta = pc.y;
-            theta = this.clampRadians(theta + Math.toRadians(agentEntity.getHeadYaw()));
+            theta = this.clampRadians(pc.y + Math.toRadians(agentEntity.getHeadYaw()));
+            String[] pcb = this.getStringifiedPolarCoordinates(pc.x, theta);
 
-            LOG.info("Flower {} angle to agent: {}", f.getNumber(), Math.toDegrees(theta));
-
-            String[] pcb = this.getStringifiedPolarCoordinates(r, theta);
-
-            sb.append("'Flower ").append(f.getNumber()).append("': {")
-                    .append("'distance_to_player': '").append(pcp[0]).append("', ")
-                    .append("'angle_to_player': ").append(pcp[1]).append("', ")
-                    .append("'distance_to_you': '").append(pcb[0]).append("', ")
-                    .append("'angle_to_you': ").append(pcb[1]).append("', ")
-                    .append(", 'color': '").append(this.flowerManager.getFlowerMinecraftColor(f))
-                    .append("'")
-                    .append(System.lineSeparator());
+            sb.append("- ").append(FlowerTraits.describe(f,
+                            this.flowerManager.getFlowerMinecraftColor(f)))
+                    .append(" | distance_to_player: ").append(pcp[0])
+                    .append(", angle_to_player: ").append(pcp[1])
+                    .append(" | distance_to_you: ").append(pcb[0])
+                    .append(", angle_to_you: ").append(pcb[1])
+                    .append(nl);
         }
     }
 
@@ -516,6 +637,8 @@ public class BeetrapStateManager {
                 .map(Flower::getNumber)
                 .toList();
         String rankingMethod = diversifying ? "most_distant" : "least_distant";
+        this.lastRankedFlowerIds = flowerIds;
+        this.lastRankingDiversifying = diversifying;
         String signature = rankingMethod + ":" + radius + ":" + flowerIds;
         if(signature.equals(this.lastRankedBudsSignature)) {
             return;

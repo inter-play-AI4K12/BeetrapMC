@@ -57,6 +57,7 @@ public final class BeetrapGameHandler {
 
         game.dispose();
         game = null;
+        beetrap.btfmc.TutorialFlow.removePortal();
     }
 
     /**
@@ -69,6 +70,7 @@ public final class BeetrapGameHandler {
      */
     public static void restartGame(MinecraftServer server, int aiLevel) {
         String carriedOverSessionId = hasGame() ? game.captureAgentSessionIdForCarryOver() : null;
+        beetrap.btfmc.TutorialFlow.removePortal();
         if(hasGame()) {
             game.disposeKeepingAgentSession();
             game = null;
@@ -127,6 +129,12 @@ public final class BeetrapGameHandler {
         }
 
         if(!hasGame()) {
+            return;
+        }
+
+        // Walked into a stage portal (Base 2): start the next stage in a fresh garden, keeping Bip.
+        if(beetrap.btfmc.TutorialFlow.consumeAdvanceRequest()) {
+            restartGame(game.getServer(), DEFAULT_AI_LEVEL);
             return;
         }
 

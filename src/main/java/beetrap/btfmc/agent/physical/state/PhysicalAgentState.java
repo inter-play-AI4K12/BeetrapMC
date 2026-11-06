@@ -318,7 +318,29 @@ public class PhysicalAgentState extends AgentState {
             this.handleFlyToPlayerCommand();
         } else if(entityType.equalsIgnoreCase("beehive")) {
             this.handleFlyToBeehiveCommand();
+        } else {
+            // "lever" (game 4) / "portal" (between stages): fixed points in the garden.
+            Vec3d point = this.resolveNamedPoint(entityType);
+            if(point == null) {
+                this.completeCommand();
+                return;
+            }
+            if(this.commandTick == 0) {
+                this.flyToPosition = this.presentationPose(point, HIVE_HEIGHT, HIVE_STANDOFF);
+            }
+            this.driveTowardFlyTarget();
         }
+    }
+
+    /** Fixed garden points Bip can fly to or look at besides flowers, the player and the hive. */
+    private Vec3d resolveNamedPoint(String name) {
+        if(name.equalsIgnoreCase("lever")) {
+            return Vec3d.ofCenter(beetrap.btfmc.BeetrapGame.CHANGE_RANKING_METHOD_LEVER_POSITION);
+        }
+        if(name.equalsIgnoreCase("portal")) {
+            return this.agent.getBeetrapStateManager().getPortalPosition();
+        }
+        return null;
     }
 
     /** Resolve a look_at target (same arg shape as fly_to) to the point Bip should face. */
@@ -337,7 +359,7 @@ public class PhysicalAgentState extends AgentState {
         if(entityType.equalsIgnoreCase("beehive")) {
             return this.agent.getBeetrapStateManager().getBeeNestController().getBeeNestPosition();
         }
-        return null;
+        return this.resolveNamedPoint(entityType);
     }
 
     /** Turn (without moving) to face a target, holding briefly so the glance reads before the next line. */

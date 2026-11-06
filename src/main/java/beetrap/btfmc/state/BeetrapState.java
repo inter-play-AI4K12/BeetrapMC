@@ -93,6 +93,39 @@ public abstract class BeetrapState implements Iterable<Flower> {
      * detect when an LLM reply has actually landed instead of guessing with a fixed timer. Chat
      * messages and scripted activity_beats share one serialized call queue to the agent service, so
      * a slow LLM round-trip can genuinely take much longer than any short fixed delay. */
+    /**
+     * A {@link BipScript} whose beats belong to the given Python activity (activities.py), timed
+     * by the caller's own tick counter.
+     */
+    protected final BipScript bipScript(String activity, java.util.function.LongSupplier ticks) {
+        BeetrapState self = this;
+        return new BipScript(new BipScript.Host() {
+            @Override
+            public long ticks() {
+                return ticks.getAsLong();
+            }
+
+            @Override
+            public boolean agentBusy() {
+                return self.agentBusy();
+            }
+
+            @Override
+            public boolean consumeConversationDone() {
+                return self.consumeConversationDone();
+            }
+
+            @Override
+            public void emitBeat(String beat, java.util.Map<String, Object> details) {
+                java.util.Map<String, Object> event = new java.util.LinkedHashMap<>();
+                event.put("activity", activity);
+                event.put("beat", beat);
+                event.putAll(details);
+                self.stateManager.recordAgentEvent("activity_beat", event);
+            }
+        });
+    }
+
     protected final boolean agentBusy() {
         var game = beetrap.btfmc.handler.BeetrapGameHandler.getGame();
         if(game == null) {

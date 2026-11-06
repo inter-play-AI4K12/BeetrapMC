@@ -23,6 +23,8 @@ public class Beetrapfabricmc implements ModInitializer {
     // True once Bip has greeted/introduced himself this run, so later activities (Observe, Filter
     // Bubble, …) skip the "Hi, I'm Bip Buzzley" line and jump straight into the activity.
     public static boolean BIP_INTRODUCED = false;
+    // True once Bip's game introduction (what the whole game teaches) has played this run.
+    public static boolean BIP_INTRO_DONE = false;
     public static String PARTICIPANT_ID = null;
     public static String SESSION_CODE;
     public static String TIMESTAMP;

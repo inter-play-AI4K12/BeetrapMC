@@ -399,6 +399,13 @@ public class RemotePhysicalAgent extends PhysicalAgent {
             item.put("color", stateManager.getFlowerManager()
                     .getFlowerMinecraftColor(flower));
             item.put("withered", flower.hasWithered());
+            // The same numbers the player's data panel shows for this flower.
+            item.put("traits", Map.of(
+                    "color", flower.v,
+                    "smell_strength", flower.w,
+                    "nectar_sweetness", flower.x,
+                    "water_needed", flower.y,
+                    "sunlight_needed", flower.z));
             flowers.add(item);
         }
         return Map.of("count", flowers.size(), "items", flowers);

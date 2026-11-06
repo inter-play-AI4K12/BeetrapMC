@@ -124,6 +124,12 @@ public class SimpleVoiceChatPlugin implements VoicechatPlugin {
 
             this.es.submit(() -> {
                 String transcription = SpeechToTextUtil.transcribeAudioFile(audioFilePath);
+                // Silence or noise can transcribe to nothing; a blank chat would make Bip reply to
+                // an empty message (the service rejects that), so just drop it.
+                if(transcription == null || transcription.isBlank()) {
+                    LOG.info("Transcription was empty, not sending it to chat");
+                    return;
+                }
                 MinecraftClient.getInstance().player.networkHandler.sendChatMessage(transcription);
                 LOG.info("Transcription: " + transcription);
             });

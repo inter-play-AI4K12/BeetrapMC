@@ -40,11 +40,36 @@ public final class CommandHandler {
             // of the server process once Bip has ever greeted anyone — silently skipping the
             // greeting/name-ask on every later playthrough in the same session.
             beetrap.btfmc.Beetrapfabricmc.BIP_INTRODUCED = false;
+            beetrap.btfmc.Beetrapfabricmc.BIP_INTRO_DONE = false;
+            beetrap.btfmc.TutorialFlow.reset();
             BeetrapGameHandler.createGame(server, aiLevel == null ? 0 : aiLevel);
         } catch(Throwable t) {
             LOG.error(t);
         }
 
+        return 0;
+    }
+
+    /**
+     * Researcher shortcut: /game stage 1-5 jumps straight to that stage (1-4 tutorial, 5 actual
+     * game) in a fresh garden, keeping Bip's session; /game stage 0 replays the introduction.
+     */
+    private static int gameStageCommand(CommandContext<ServerCommandSource> commandContext) {
+        try {
+            int stage = commandContext.getArgument("stage", Integer.class);
+            MinecraftServer server = commandContext.getSource().getServer();
+            beetrap.btfmc.TutorialFlow.removePortal();
+            if(stage <= 0) {
+                beetrap.btfmc.Beetrapfabricmc.BIP_INTRO_DONE = false;
+                beetrap.btfmc.TutorialFlow.pendingActivity = beetrap.btfmc.TutorialFlow.NONE;
+            } else {
+                beetrap.btfmc.Beetrapfabricmc.BIP_INTRO_DONE = true;
+                beetrap.btfmc.TutorialFlow.pendingActivity = Math.min(stage, 5) - 1;
+            }
+            BeetrapGameHandler.restartGame(server, 3);
+        } catch(Throwable t) {
+            LOG.error(t);
+        }
         return 0;
     }
 
@@ -65,6 +90,11 @@ public final class CommandHandler {
                 )
                 .then(CommandManager.literal("destroy")
                         .executes(CommandHandler::gameDestroyCommand)
+                )
+                .then(CommandManager.literal("stage")
+                        .then(CommandManager.argument("stage", IntegerArgumentType.integer(0, 5))
+                                .executes(CommandHandler::gameStageCommand)
+                        )
                 )
         );
 
