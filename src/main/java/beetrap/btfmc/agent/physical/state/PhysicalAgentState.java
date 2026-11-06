@@ -14,8 +14,6 @@ import beetrap.btfmc.tts.SlopTextToSpeechUtil;
 import beetrap.btfmc.util.TextUtil;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import net.minecraft.entity.passive.BeeEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -58,9 +56,37 @@ public class PhysicalAgentState extends AgentState {
     protected long textDisplayStartTick;
     protected double audioDurationSeconds;
     protected String fullDialogue;
-    
+    // The line waiting for (or playing) its voice; null when Bip isn't speaking.
+    protected SpeechLine speech;
+
     // Display chunk size for readability
     protected static final int DISPLAY_CHUNK_LENGTH = 25;
+    // If the voice still isn't ready after this long (~5s), show the text anyway.
+    private static final int VOICE_WAIT_TICKS = 100;
+    // Never let one line hold the queue longer than its length plus this (~10s).
+    private static final int LINE_SAFETY_TICKS = 200;
+
+    /**
+     * One spoken line. The text is held back until its voice starts playing so the two stay in
+     * sync. TTS callbacks write to it from other threads; tick() reads it on the server thread.
+     * Shared (not copied) across state transitions so a callback never lands on a stale state.
+     */
+    protected static final class SpeechLine {
+        final String dialogue;
+        final long requestTick;
+        volatile double audioSeconds = -1;   // >= 0 once the voice is ready and starting
+        volatile boolean failed;
+        volatile boolean playbackDone;
+        boolean shown;
+        boolean synced;                      // text pacing follows the real audio
+        long shownTick = -1;
+        double displaySeconds;
+
+        SpeechLine(String dialogue, long requestTick) {
+            this.dialogue = dialogue;
+            this.requestTick = requestTick;
+        }
+    }
 
     // Idle hover state (not carried across state transitions by design)
     private Vec3d idleWanderTarget = null;
@@ -100,6 +126,7 @@ public class PhysicalAgentState extends AgentState {
         this.textDisplayStartTick = state.textDisplayStartTick;
         this.audioDurationSeconds = state.audioDurationSeconds;
         this.fullDialogue = state.fullDialogue;
+        this.speech = state.speech;
     }
 
     @Override
@@ -114,47 +141,78 @@ public class PhysicalAgentState extends AgentState {
 
     private void handleSayCommand(String dialogue) {
         if(this.commandTick == 0) {
-            // Send chat message as before
-            this.world.getPlayers().forEach(
-                    serverPlayerEntity -> serverPlayerEntity.sendMessage(
-                            Text.of("<" + this.name + "> " + dialogue)));
-
-            // Check if text is currently being displayed
-            if (this.isTextDisplayActive) {
-                // Queue the new dialogue instead of interrupting current display
+            // Check if a line is currently being spoken
+            if (this.isTextDisplayActive || this.speech != null) {
+                // Queue the new dialogue instead of interrupting the current line
                 this.pendingDialogue = dialogue;
             } else {
-                // Start the new proportional dialogue display system
                 this.startProportionalDialogue(dialogue);
             }
         }
         // Note: updateTextDisplay() is now called in tick() method to run independently of command system
     }
-    
+
+    /**
+     * Ask for the line's voice. The text (chat line and the words over Bip's head) waits in
+     * updateTextDisplay() until the voice starts, so what kids read matches what they hear.
+     */
     private void startProportionalDialogue(String dialogue) {
-        this.fullDialogue = dialogue;
-
-        // Show the line IMMEDIATELY with an estimated duration so Bip "talks" without waiting on
-        // the Typecast download (which can take a few seconds). The voice plays when it is ready,
-        // and we refine the chunk pacing once the real audio length is known. This is the single
-        // biggest win against perceived lag — the text no longer trails the network round-trip.
-        double estimatedSeconds = Math.max(1.5, dialogue.length() / 15.0);
-        this.beginTextDisplay(dialogue, estimatedSeconds);
-
+        SpeechLine line = new SpeechLine(dialogue, this.world.getTime());
+        this.speech = line;
         SlopTextToSpeechUtil.sayWithDuration(dialogue).thenAccept(ttsResult -> {
-            // Refine the on-screen pacing to the real audio length, and finish the command only
-            // when playback actually ends (so back-to-back lines don't talk over each other).
-            this.audioDurationSeconds = ttsResult.durationSeconds;
-            ttsResult.playbackFuture.whenComplete((unused, throwable) ->
-                    this.finishTextDisplay());
+            line.audioSeconds = ttsResult.durationSeconds;
+            ttsResult.playbackFuture.whenComplete((unused, throwable) -> line.playbackDone = true);
         }).exceptionally(throwable -> {
-            // TTS failed (e.g. missing/invalid Typecast key or unreachable endpoint). The text is
-            // already showing; just clear it after the estimate so the queue keeps moving.
-            CompletableFuture
-                    .delayedExecutor((long)(estimatedSeconds * 1000), TimeUnit.MILLISECONDS)
-                    .execute(this::finishTextDisplay);
+            line.failed = true;   // no voice: the text still shows, timed by an estimate
             return null;
         });
+    }
+
+    /** Show a line now: the chat message plus the words over Bip's head, paced over {@code seconds}. */
+    private void showLine(SpeechLine line, double seconds) {
+        line.shown = true;
+        line.shownTick = this.world.getTime();
+        line.displaySeconds = seconds;
+        this.world.getPlayers().forEach(
+                serverPlayerEntity -> serverPlayerEntity.sendMessage(
+                        Text.of("<" + this.name + "> " + line.dialogue)));
+        this.fullDialogue = line.dialogue;
+        this.beginTextDisplay(line.dialogue, seconds);
+    }
+
+    /** Server-thread side of a spoken line: show it when the voice starts, end it when it ends. */
+    private void tickSpeech() {
+        SpeechLine line = this.speech;
+        if(line == null) {
+            return;
+        }
+        long now = this.world.getTime();
+        boolean voiceReady = line.audioSeconds >= 0;
+        if(!line.shown) {
+            if(voiceReady) {
+                line.synced = true;
+                this.showLine(line, line.audioSeconds);
+            } else if(line.failed || now - line.requestTick >= VOICE_WAIT_TICKS) {
+                this.showLine(line, Math.max(1.5, line.dialogue.length() / 15.0));
+            }
+            return;
+        }
+        if(!line.synced && voiceReady) {
+            // The voice turned up after the text was already showing: restart the pacing from now.
+            line.synced = true;
+            line.shownTick = now;
+            line.displaySeconds = line.audioSeconds;
+            this.textDisplayStartTick = now;
+            this.audioDurationSeconds = line.audioSeconds;
+        }
+        long elapsed = now - line.shownTick;
+        // No voice at all: end on the estimate. A slow (not failed) voice is waited for, up to the
+        // safety cap, so it can't end up playing over the next line.
+        boolean textOnlyDone = !voiceReady && line.failed && elapsed >= line.displaySeconds * 20;
+        if(line.playbackDone || textOnlyDone || elapsed >= line.displaySeconds * 20 + LINE_SAFETY_TICKS) {
+            this.speech = null;
+            this.finishTextDisplay();
+        }
     }
 
     private void beginTextDisplay(String dialogue, double durationSeconds) {
@@ -181,6 +239,8 @@ public class PhysicalAgentState extends AgentState {
     }
 
     private void updateTextDisplay() {
+        this.tickSpeech();
+
         // Handle proportional chunk display timing
         if (this.isTextDisplayActive && this.textChunks != null && !this.textChunks.isEmpty()) {
             long currentTick = this.world.getTime();
@@ -217,7 +277,7 @@ public class PhysicalAgentState extends AgentState {
         }
         
         // Handle pending dialogue processing
-        if (!this.isTextDisplayActive && this.pendingDialogue != null) {
+        if (!this.isTextDisplayActive && this.speech == null && this.pendingDialogue != null) {
             String nextDialogue = this.pendingDialogue;
             this.pendingDialogue = null;
             this.startProportionalDialogue(nextDialogue);
