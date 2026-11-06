@@ -21,14 +21,12 @@ import net.minecraft.entity.passive.BeeEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 public class PhysicalAgentState extends AgentState {
     private static final Random IDLE_RANDOM = new Random();
     private static final double IDLE_HOVER_RADIUS = 2.5;       // blocks: how far Bip hovers from player
     private static final double IDLE_FOLLOW_DISTANCE = 3.5;    // blocks: player moves this far -> Bip follows
-    private static final double FACE_VELOCITY_EPSILON = 0.002; // only face player when essentially still
     private static final double FLY_TO_SPEED = 4.5;           // MoveControl multiplier for fly_to commands
     private static final double ARRIVAL_EPSILON = 0.6;         // 3D distance at which a fly_to is "arrived"
     private static final long LOOK_AT_TICKS = 7;              // hold a "look_at" this long so the turn reads
@@ -70,6 +68,8 @@ public class PhysicalAgentState extends AgentState {
     // When set (by a look_at command), Bip faces this point instead of the player until he next
     // flies somewhere. Lets him turn to a flower, react, then dart over.
     private Vec3d faceOverride = null;
+    // Decides yaw/pitch each tick (see updateHeading). Keeps its own fly/look hysteresis state.
+    private final beetrap.btfmc.agent.physical.BipHeading heading = new beetrap.btfmc.agent.physical.BipHeading();
 
     public PhysicalAgentState() {
         super();
@@ -445,23 +445,9 @@ public class PhysicalAgentState extends AgentState {
             }
         }
 
-        // Face a target whenever MoveControl isn't actively steering and Bip is essentially still —
-        // this keeps eye contact during idle/talking without fighting MoveControl's own heading
-        // control (which would otherwise cause rapid left-right head twitching). Checking
-        // MoveControl.isMoving() directly (not just "is there a fly_to command") matters: idle
-        // wander also steers via MoveControl.moveTo() without going through a command at all, so a
-        // command-type check alone missed that case and let the two fight during idle hovering.
-        // An explicit look_at override (e.g. glancing at a dead flower before reacting) always wins;
-        // otherwise face the player when that feature is on.
-        if(!this.beeEntity.getMoveControl().isMoving()
-                && this.beeEntity.getVelocity().horizontalLengthSquared() < FACE_VELOCITY_EPSILON) {
-            if(this.faceOverride != null) {
-                this.faceToward(this.faceOverride);
-            } else if(beetrap.btfmc.BipFeatures.LOOK_AT_PLAYER
-                    && !this.world.getPlayers().isEmpty()) {
-                this.facePlayer(this.world.getPlayers().getFirst());
-            }
-        }
+        // Bip's rotation has exactly one writer: this call, every tick, with no on/off conditions.
+        // (BipBeeEntity stops the bee's own move/look controls from rotating it.)
+        this.updateHeading();
 
         if(!(this instanceof PAS1EndGame)) {
             if(this.agent.getBeetrapStateManager().isActivityEnded()) {
@@ -494,33 +480,38 @@ public class PhysicalAgentState extends AgentState {
         }
     }
 
-    /** Smoothly turn Bip to face the player (yaw, body, head and pitch). */
-    private void facePlayer(ServerPlayerEntity player) {
-        this.faceToward(player.getEyePos());
-    }
+    /**
+     * Turn Bip a little toward where he should look: along his flight path while he is flying,
+     * otherwise at an explicit look_at point, otherwise at the player. {@link BipHeading} limits
+     * how far he can turn per tick and ignores tiny corrections, so the head never snaps.
+     */
+    private void updateHeading() {
+        Vec3d target = this.faceOverride;
+        if(target == null && beetrap.btfmc.BipFeatures.LOOK_AT_PLAYER
+                && !this.world.getPlayers().isEmpty()) {
+            target = this.world.getPlayers().getFirst().getEyePos();
+        }
 
-    /** Ease Bip's yaw/pitch toward an arbitrary world point (a glance, not a snap). */
-    private void faceToward(Vec3d target) {
-        Vec3d bee = this.beeEntity.getPos();
-        double dx = target.x - bee.x;
-        double dy = target.y - (bee.y + this.beeEntity.getStandingEyeHeight());
-        double dz = target.z - bee.z;
-        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        double dx = 0.0;
+        double dy = 0.0;
+        double dz = 0.0;
+        if(target != null) {
+            Vec3d bee = this.beeEntity.getPos();
+            dx = target.x - bee.x;
+            dy = target.y - (bee.y + this.beeEntity.getStandingEyeHeight());
+            dz = target.z - bee.z;
+        }
 
-        float targetYaw = (float)(MathHelper.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0f;
-        float targetPitch = (float)(-(MathHelper.atan2(dy, horizontal) * (180.0 / Math.PI)));
+        // A punch shoves Bip, but he should keep looking at the player, not turn to the shove.
+        Vec3d velocity = this.physicalAgent.isBeingShoved() ? Vec3d.ZERO : this.beeEntity.getVelocity();
+        this.heading.update(this.beeEntity.getYaw(), this.beeEntity.getPitch(),
+                velocity.x, velocity.z, target != null, dx, dy, dz);
 
-        float yaw = this.approachAngle(this.beeEntity.getYaw(), targetYaw, 0.4f);
-        float pitch = this.approachAngle(this.beeEntity.getPitch(), targetPitch, 0.4f);
-
+        float yaw = this.heading.yaw();
         this.beeEntity.setYaw(yaw);
         this.beeEntity.setBodyYaw(yaw);
         this.beeEntity.setHeadYaw(yaw);
-        this.beeEntity.setPitch(pitch);
-    }
-
-    private float approachAngle(float from, float to, float fraction) {
-        return from + MathHelper.wrapDegrees(to - from) * fraction;
+        this.beeEntity.setPitch(this.heading.pitch());
     }
 
     public void updateStateInstruction(InstructionBuilder ib) {

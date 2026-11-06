@@ -31,6 +31,8 @@ public class PhysicalAgent extends Agent {
             "EASY THERE!"
     };
     private static final long KICK_REACTION_COOLDOWN_MS = 600L;
+    /** How long after a punch the shove still counts as knock-back rather than a flight. */
+    private static final long KICK_SHOVE_MS = 1500L;
 
     private final BeeEntity beeEntity;
     private final Random random;
@@ -39,7 +41,7 @@ public class PhysicalAgent extends Agent {
     public PhysicalAgent(ServerWorld world, BeetrapStateManager beetrapStateManager) {
         super(world, beetrapStateManager, new PAS0Introduction());
 
-        this.beeEntity = new BeeEntity(EntityType.BEE, this.world);
+        this.beeEntity = new BipBeeEntity(EntityType.BEE, this.world);
         this.beeEntity.getGoalSelector().clear(goal -> true);
         this.beeEntity.setInvulnerable(true);
         this.beeEntity.setPos(0.5, 1, 0.5);
@@ -50,6 +52,14 @@ public class PhysicalAgent extends Agent {
 
     public BeeEntity getBeeEntity() {
         return this.beeEntity;
+    }
+
+    /**
+     * True for a moment after a punch. The shove is not a flight, so Bip should keep facing the
+     * player instead of turning to face the way he is being pushed.
+     */
+    public boolean isBeingShoved() {
+        return System.currentTimeMillis() - this.lastKickReactionMs < KICK_SHOVE_MS;
     }
 
     /**
