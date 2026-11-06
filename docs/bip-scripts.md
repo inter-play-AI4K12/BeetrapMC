@@ -89,14 +89,15 @@ broke the bubble and saved the garden" → "Mix up what you watch to keep your f
 here if you need me." Each round Bip reacts to what changed (improvised from the live game state).
 It never ends by itself; the restart item goes back to the menu.
 
-## Base 1 (branch `Son`) vs Base 2 (branch `Base2`)
+## How the stages connect (this branch, `Son`, is Base 2)
 
-| | Base 1 (`Son`) | Base 2 (`Base2`) |
-|---|---|---|
-| After `/game new 3` | consent → Introduction → stage menu | consent → Introduction → Tutorial |
-| Between stages | restart item (slot 7) → stage menu | a **nether portal** opens in front of the player; walking in starts the next stage in a fresh garden (Bip keeps his memory) |
-| Tutorial order | player picks | 1 Observe → 2 Filter bubble → 3 Recommend → 4 Break the bubble |
-| After the tutorial | — | menu: replay stage 1–4 or **Play the real game** (game 5) |
-| Researcher shortcut | — | `/game stage 1-5` jumps to a stage, `/game stage 0` replays the intro |
+| | |
+|---|---|
+| After `/game new 3` | consent → Introduction → Tutorial |
+| Between stages | a **nether portal** opens in front of the player; walking in starts the next stage in a fresh garden (Bip keeps his memory) |
+| Tutorial order | 1 Observe → 2 Filter bubble → 3 Recommend → 4 Break the bubble |
+| After the tutorial | menu: replay stage 1–4 or **Play the real game** (game 5) |
+| Researcher shortcut | `/game stage 1-5` jumps to a stage, `/game stage 0` replays the intro |
 
-Both use the same BeeCuriousService code (`bip@4.0`).
+Needs the `Son` branch of BeeCuriousService (`bip@4.0`). An earlier "Base 1" version, where the
+player picked stages from a menu and moved on with the restart item, is no longer on this branch.

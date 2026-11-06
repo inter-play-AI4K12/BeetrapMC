@@ -6,6 +6,56 @@ A Minecraft Fabric mod that runs a **bee & flower “Beetrap” game** inside a 
 Gameplay logic is orchestrated on the server and exposed to players via custom payloads, chat, boss bars, and a scoreboard.  
 An **LLM-driven Agent** can observe events and issue high-level commands that are translated into in-game actions via the game/state managers. Agent decisions come from the separate `BeeCuriousService` Python project.
 
+## Running the `Son` branch (Base 2)
+
+On this branch Bip runs the whole game: an introduction, a four-stage tutorial joined by nether
+portals, then the real game. Bip needs the **`Son` branch of BeeCuriousService** too. The
+service's `main` branch has no Bip 4.0 and no scripted lines, so Bip would stay silent.
+
+**You need:** Git, Java 21 (Amazon Corretto preferred), Python 3.11+, an OpenAI API key, and the
+Beetrap garden world (from the project's Releases page or a teammate).
+
+1. **Get both repos on `Son`:**
+   ```bash
+   git clone -b Son https://github.com/inter-play-AI4K12/BeetrapMC.git
+   git clone -b Son https://github.com/inter-play-AI4K12/BeeCuriousService.git
+   ```
+2. **Set up and start the service** (leave it running):
+   ```bash
+   cd BeeCuriousService
+   cp .env.example .env
+   python -m pip install -e .
+   PYTHONPATH=src python -m beecurious_service
+   ```
+   In `BeeCuriousService/.env`, set `BEECURIOUS_AGENT_PROVIDER=openai`, your `OPENAI_API_KEY`,
+   and keep `BEECURIOUS_DEFAULT_AGENT_VERSION=4.0`. With the default `mock` provider Bip's
+   scripted lines still play, but his chat replies are placeholders.
+3. **Launch the game once** with `./gradlew runClient` (Windows: `gradlew runClient`) and open
+   Singleplayer so the `run/saves` folder exists. Then close it.
+4. **Add the world:** unzip the Beetrap world into `run/saves/` (one level, so you get
+   `run/saves/Beetrap/level.dat`).
+5. **Create `run/.env`** with `OPENAI_API_KEY=...` (used for the microphone and Bip's voice).
+   `TYPECAST_API_KEY=...` is optional: Bip uses Typecast's voice when it works and OpenAI's
+   voice otherwise. Both sides default to port `8765`, so `BEECURIOUS_SERVICE_URL` is only
+   needed if you change the service port.
+6. **Play:** run `./gradlew runClient`, open the Beetrap world and type `/game new 3`.
+
+**What happens:** consent screen → Bip's intro → 1 Observe the flowers → 2 The filter bubble →
+3 How the garden recommends (with a quiz) → 4 Break the bubble. A nether portal opens after
+each stage; walk in to continue (Bip remembers you). After stage 4 a menu lets you replay a stage
+or play the real game. Every line Bip says, in order, is in
+[`docs/bip-scripts.md`](docs/bip-scripts.md).
+
+**Commands:** `/game new 3` starts, `/game stage 1`–`5` jumps to a stage (`0` replays the intro),
+`/game destroy` cleans up the garden.
+
+**If something's off:**
+- *Bip never talks:* the service isn't running, isn't on the `Son` branch, or isn't on port 8765.
+- *Bip's text shows but there's no voice:* check `OPENAI_API_KEY` in `run/.env`. The game log
+  says `Bip TTS failed` with the reason.
+- *Everything stops when you click out of Minecraft:* singleplayer pauses when the window loses
+  focus. Click back in.
+
 ## BeeCuriousService
 
 Start the service before launching an AI level 3 game:
@@ -157,16 +207,22 @@ When `CommandHandler` creates a new `BeetrapGame(server, bottomLeft, topRight, a
 
 ## Configuration
 
-Create a `.env` in the server working directory (or set real env vars) with:
+Create a `.env` in the server working directory (`run/.env` with `gradlew runClient`, or set real
+env vars) with:
 ```dotenv
 BEECURIOUS_SERVICE_URL=http://127.0.0.1:8765
 LOKI_URL=https://loki-beetrap.interplaylab.io
 LOKI_USER=beetrap
 LOKI_PASSWORD=...
-TYPECAST_API_KEY=...
-# Optional: used by client-side speech-to-text
+# Speech-to-text, and Bip's voice whenever Typecast is unavailable
 OPENAI_API_KEY=...
+# Optional: Bip's main voice
+TYPECAST_API_KEY=...
 ```
+
+Bip's behaviour flags (`BIP_IDLE_WANDER`, `BIP_LOOK_AT_PLAYER`, `BIP_EMOTION_PARTICLES`,
+`BIP_KICK_REACTION`, `BIP_TIERED_HINTS`, `BIP_TIME_TRAVEL_HANDOVER`, `BIP_INTERACTIVE_QA`) are all on
+by default; set one to `false` in the same file to turn it off.
 
 > Agent model credentials belong in `BeeCuriousService`, not the Fabric `.env`.
 
@@ -177,16 +233,15 @@ OPENAI_API_KEY=...
 - git pull
 - Use a **Fabric**-compatible JDK and Gradle setup.
 - Make sure your `.env` (or environment variables) is present before server launch.
-- Use the registered commands (see `CommandHandler`) to define the garden area and **start a game
-**.
-- cd to beetrap-fabricmc-1.21.4
-- .gradlew runClient
+- Use the registered commands (see `CommandHandler`) to **start a game**: `/game new 3`.
+- cd into the project folder
+- `./gradlew runClient` (Windows: `gradlew runClient`)
 ---
 
 ## Troubleshooting
 
 - **Agent unavailable**: start `BeeCuriousService` and verify `BEECURIOUS_SERVICE_URL`.
-- **No game activity**: the mod initializes quietly; run the start command from `CommandHandler` to create a game.
+- **No game activity**: the mod initializes quietly; run `/game new 3` to create a game.
 - **Packets not received**: verify `NetworkHandler.registerCustomPayloads()` ran (it does during `onInitialize`) and that the client mod is aligned with the same payload ids.
 
 ---
