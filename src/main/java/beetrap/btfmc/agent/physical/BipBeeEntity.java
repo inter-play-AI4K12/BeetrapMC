@@ -1,7 +1,7 @@
 package beetrap.btfmc.agent.physical;
 
 import net.minecraft.entity.EntityType;
-import net.minecraft.entity.ai.control.FlyingMoveControl;
+import net.minecraft.entity.ai.control.FlightMoveControl;
 import net.minecraft.entity.ai.control.LookControl;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.passive.BeeEntity;
@@ -25,7 +25,7 @@ public class BipBeeEntity extends BeeEntity {
     }
 
     /** The vanilla bee flight control (same speed, climb and hover), minus its rotation changes. */
-    private static final class HeadingPreservingMoveControl extends FlyingMoveControl {
+    private static final class HeadingPreservingMoveControl extends FlightMoveControl {
         private final MobEntity bee;
 
         HeadingPreservingMoveControl(MobEntity bee) {
