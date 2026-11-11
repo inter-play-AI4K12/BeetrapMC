@@ -27,18 +27,27 @@ Beetrap garden world (from the project's Releases page or a teammate).
    python -m pip install -e .
    PYTHONPATH=src python -m beecurious_service
    ```
-   In `BeeCuriousService/.env`, set `BEECURIOUS_AGENT_PROVIDER=openai`, your `OPENAI_API_KEY`,
-   and keep `BEECURIOUS_DEFAULT_AGENT_VERSION=4.0`. With the default `mock` provider Bip's
-   scripted lines still play, but his chat replies are placeholders.
+   Fill in your own `OPENAI_API_KEY` in `BeeCuriousService/.env`, and keep
+   `BEECURIOUS_DEFAULT_AGENT_VERSION=4.0`. The example matches the local `son-base2` settings:
+   provider `openai`, model `gpt-6-luna`, port `13161`. Choose a model your account can access.
+   For key-free scripted play, set the provider to `mock`; chat replies will be placeholders.
+   On Windows PowerShell, start from the service folder with
+   `$env:PYTHONPATH='src'; python -m beecurious_service`.
 3. **Launch the game once** with `./gradlew runClient` (Windows: `gradlew runClient`) and open
    Singleplayer so the `run/saves` folder exists. Then close it.
 4. **Add the world:** unzip the Beetrap world into `run/saves/` (one level, so you get
    `run/saves/Beetrap/level.dat`).
-5. **Create `run/.env`** with `OPENAI_API_KEY=...` (used for the microphone and Bip's voice).
-   `TYPECAST_API_KEY=...` is optional: Bip uses Typecast's voice when it works and OpenAI's
-   voice otherwise. Both sides default to port `8765`, so `BEECURIOUS_SERVICE_URL` is only
-   needed if you change the service port.
+5. **Copy `.env.example` to `run/.env`** from the BeetrapMC folder (PowerShell:
+   `Copy-Item .env.example run/.env`). Fill in your own `OPENAI_API_KEY` for the microphone and
+   Bip's voice. `TYPECAST_API_KEY` is optional: Bip uses Typecast when it works and OpenAI
+   otherwise. The paired examples use port `13161`; if you change the service's
+   `BEECURIOUS_PORT`, update the game's `BEECURIOUS_SERVICE_URL` to match.
 6. **Play:** run `./gradlew runClient`, open the Beetrap world and type `/game new 3`.
+
+The real `.env` files and the entire `run/` folder (including the world and logs) are ignored by
+Git. A pull does not copy these between laptops or update an existing `.env`. After pulling,
+compare both `.env` files with the examples and restart both the service and Minecraft.
+Keep credentials in the local files; only the blank-credential examples belong in Git.
 
 **What happens:** consent screen → Bip's intro → 1 Observe the flowers → 2 The filter bubble →
 3 How the garden recommends (with a quiz) → 4 Break the bubble. A nether portal opens after
@@ -50,7 +59,8 @@ or play the real game. Every line Bip says, in order, is in
 `/game destroy` cleans up the garden.
 
 **If something's off:**
-- *Bip never talks:* the service isn't running, isn't on the `Son` branch, or isn't on port 8765.
+- *Bip never talks:* verify both repos are on `Son`, the service is running, the game URL matches
+  its port (`13161` with the paired examples), and the service logs show profile `bip@4.0`.
 - *Bip's text shows but there's no voice:* check `OPENAI_API_KEY` in `run/.env`. The game log
   says `Bip TTS failed` with the reason.
 - *Everything stops when you click out of Minecraft:* singleplayer pauses when the window loses
